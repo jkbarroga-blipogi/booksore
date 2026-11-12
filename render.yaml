@@ -1,13 +1,19 @@
 services:
   - type: web
-    name: bookstore-app
+    name: booksore
     runtime: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/v1/health
     envVars:
       - key: NODE_ENV
         value: production
       - key: DB_PATH
-        value: /tmp/bookstore.db
+        value: /tmp/booksore.db
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

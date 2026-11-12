@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { ConflictError } from "../errors/domain-errors.js";
 
 const SORT_COLUMNS = {
   createdAt: "created_at",
@@ -26,6 +27,8 @@ function mapRow(row) {
     stock: row.stock,
     publishedYear: row.published_year,
     description: row.description,
+    coverUrl: row.cover_url,
+    featured: Boolean(row.featured),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -48,7 +51,16 @@ export class BookRepository {
     return mapRow(stmt.get(isbn));
   }
 
-  findAll({ q, genre, page = 1, limit = 12, sort = "createdAt", order = "desc" } = {}) {
+  findAll({
+    q,
+    genre,
+    featured,
+    inStock,
+    page = 1,
+    limit = 12,
+    sort = "createdAt",
+    order = "desc",
+  } = {}) {
     const conditions = [];
     const params = [];
 
@@ -61,6 +73,17 @@ export class BookRepository {
     if (genre) {
       conditions.push("genre = ?");
       params.push(genre);
+    }
+
+    if (featured !== undefined) {
+      conditions.push("featured = ?");
+      params.push(featured ? 1 : 0);
+    }
+
+    if (inStock === true) {
+      conditions.push("stock > 0");
+    } else if (inStock === false) {
+      conditions.push("stock = 0");
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -87,8 +110,9 @@ export class BookRepository {
     const now = new Date().toISOString();
     const stmt = this.#db.prepare(`
       INSERT INTO books (
-        id, title, author, isbn, genre, price_cents, stock, published_year, description, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, title, author, isbn, genre, price_cents, stock, published_year,
+        description, cover_url, featured, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -101,6 +125,8 @@ export class BookRepository {
       data.stock,
       data.publishedYear,
       data.description ?? "",
+      data.coverUrl ?? "",
+      data.featured ? 1 : 0,
       now,
       now,
     );
@@ -121,6 +147,8 @@ export class BookRepository {
       stock: "stock",
       publishedYear: "published_year",
       description: "description",
+      coverUrl: "cover_url",
+      featured: "featured",
     };
 
     const assignments = [];
@@ -129,7 +157,7 @@ export class BookRepository {
     for (const [key, column] of Object.entries(fieldMap)) {
       if (updates[key] !== undefined) {
         assignments.push(`${column} = ?`);
-        values.push(updates[key]);
+        values.push(key === "featured" ? (updates[key] ? 1 : 0) : updates[key]);
       }
     }
 
@@ -158,7 +186,8 @@ export class BookRepository {
       SELECT
         COUNT(*) AS totalTitles,
         COALESCE(SUM(stock), 0) AS totalUnits,
-        COALESCE(SUM(CASE WHEN stock <= 3 THEN 1 ELSE 0 END), 0) AS lowStockCount
+        COALESCE(SUM(CASE WHEN stock <= 3 AND stock > 0 THEN 1 ELSE 0 END), 0) AS lowStockCount,
+        COALESCE(SUM(CASE WHEN stock = 0 THEN 1 ELSE 0 END), 0) AS outOfStockCount
       FROM books
     `);
     const summary = summaryStmt.get();
@@ -170,7 +199,87 @@ export class BookRepository {
       totalTitles: summary.totalTitles,
       totalUnits: summary.totalUnits,
       lowStockCount: summary.lowStockCount,
+      outOfStockCount: summary.outOfStockCount,
       genres,
     };
+  }
+
+  checkoutItems(requestedItems) {
+    const merged = new Map();
+    for (const item of requestedItems) {
+      merged.set(item.bookId, (merged.get(item.bookId) ?? 0) + item.quantity);
+    }
+
+    this.#db.exec("BEGIN IMMEDIATE");
+    try {
+      const findStmt = this.#db.prepare("SELECT * FROM books WHERE id = ?");
+      const updateStmt = this.#db.prepare(
+        "UPDATE books SET stock = stock - ?, updated_at = ? WHERE id = ? AND stock >= ?",
+      );
+
+      const failures = [];
+      const lineItems = [];
+      const now = new Date().toISOString();
+
+      for (const [bookId, quantity] of merged.entries()) {
+        const row = findStmt.get(bookId);
+        if (!row) {
+          failures.push({
+            bookId,
+            title: "Unknown book",
+            requested: quantity,
+            available: 0,
+            reason: "NOT_FOUND",
+          });
+          continue;
+        }
+        if (row.stock < quantity) {
+          failures.push({
+            bookId,
+            title: row.title,
+            requested: quantity,
+            available: row.stock,
+            reason: row.stock === 0 ? "OUT_OF_STOCK" : "INSUFFICIENT_STOCK",
+          });
+          continue;
+        }
+        lineItems.push({
+          bookId: row.id,
+          title: row.title,
+          unitPriceCents: row.price_cents,
+          quantity,
+          subtotalCents: row.price_cents * quantity,
+        });
+      }
+
+      if (failures.length > 0) {
+        throw new ConflictError("One or more books are out of stock or lack sufficient quantity", {
+          code: "OUT_OF_STOCK",
+          details: failures,
+        });
+      }
+
+      for (const line of lineItems) {
+        const result = updateStmt.run(line.quantity, now, line.bookId, line.quantity);
+        if (result.changes === 0) {
+          throw new ConflictError("Concurrent stock update prevented checkout", {
+            code: "OUT_OF_STOCK",
+          });
+        }
+      }
+
+      this.#db.exec("COMMIT");
+
+      const totalCents = lineItems.reduce((sum, item) => sum + item.subtotalCents, 0);
+      return {
+        orderId: crypto.randomUUID(),
+        checkedOutAt: now,
+        totalCents,
+        items: lineItems,
+      };
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
+    }
   }
 }

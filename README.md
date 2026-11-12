@@ -1,11 +1,22 @@
-# Bookstore App
+# Booksore
 
-Full-stack Bookstore inventory and catalog CRUD web application built with Node.js (`node:sqlite`), Express, Zod, and vanilla ES modules.
+Editorial bookstore storefront, shopping cart checkout, and admin inventory CRUD app built with React, Vite, Express, Zod, and Node SQLite (`node:sqlite`).
 
 ## Local Setup
 
+1. Copy `.env.example` to `.env` and set `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `SESSION_SECRET`.
+2. Install dependencies and start:
+
 ```bash
 npm install
+npm run dev:api
+npm run dev:web
+```
+
+Or build and run unified server:
+
+```bash
+npm run build
 npm start
 ```
 
@@ -20,12 +31,16 @@ npm test
 ## API Endpoints
 
 - `GET /api/v1/health`
-- `GET /api/v1/books` (`q`, `genre`, `sort`, `order`, `page`, `limit`)
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/me`
+- `GET /api/v1/books` (`q`, `genre`, `featured`, `inStock`, `sort`, `order`, `page`, `limit`)
 - `GET /api/v1/books/:id`
-- `POST /api/v1/books`
-- `PATCH /api/v1/books/:id`
-- `DELETE /api/v1/books/:id`
+- `POST /api/v1/books` (admin cookie required)
+- `PATCH /api/v1/books/:id` (admin cookie required)
+- `DELETE /api/v1/books/:id` (admin cookie required)
+- `POST /api/v1/checkout`
 
 ## Render Deployment
 
-Includes `render.yaml` Blueprint. Connect your GitHub repository in Render and deploy as a Blueprint or Node Web Service (`npm install` / `npm start`, health check `/api/v1/health`).
+Includes `render.yaml` Blueprint. Connect GitHub repository `booksore` in Render as a Blueprint or Web Service and provide `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables.

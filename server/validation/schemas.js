@@ -6,6 +6,27 @@ function normalizeIsbn(raw) {
   return raw.replace(/[\s-]+/g, "").toUpperCase();
 }
 
+function isSafeCoverUrl(value) {
+  if (!value) return true;
+  if (value.startsWith("/")) return !value.startsWith("//");
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+const coverUrlSchema = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .default("")
+  .refine(isSafeCoverUrl, {
+    message: "Cover URL must be an http(s) URL or relative path",
+  });
+
 const isbnSchema = z
   .string()
   .trim()
@@ -23,6 +44,8 @@ const bookBaseSchema = z.object({
   stock: z.number().int().min(0).max(100_000),
   publishedYear: z.number().int().min(1450).max(2100),
   description: z.string().trim().max(2000).optional().default(""),
+  coverUrl: coverUrlSchema,
+  featured: z.boolean().optional().default(false),
 });
 
 export const createBookSchema = bookBaseSchema;
@@ -32,6 +55,13 @@ export const updateBookSchema = bookBaseSchema
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided for update",
   });
+
+function parseOptionalBool(value) {
+  if (value === undefined || value === "") return undefined;
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  return value;
+}
 
 export const bookQuerySchema = z.object({
   q: z
@@ -46,6 +76,8 @@ export const bookQuerySchema = z.object({
     .max(60)
     .optional()
     .transform((v) => (v && v.length > 0 ? v : undefined)),
+  featured: z.preprocess(parseOptionalBool, z.boolean().optional()),
+  inStock: z.preprocess(parseOptionalBool, z.boolean().optional()),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(12),
   sort: z
@@ -56,4 +88,21 @@ export const bookQuerySchema = z.object({
 
 export const idParamSchema = z.object({
   id: z.string().uuid("Invalid book ID format"),
+});
+
+export const loginSchema = z.object({
+  email: z.string().trim().email("Valid email is required").max(200).toLowerCase(),
+  password: z.string().min(1, "Password is required").max(200),
+});
+
+export const checkoutSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        bookId: z.string().uuid("Invalid book ID format"),
+        quantity: z.number().int().min(1).max(99),
+      }),
+    )
+    .min(1, "Cart cannot be empty")
+    .max(50),
 });

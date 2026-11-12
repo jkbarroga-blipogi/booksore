@@ -13,15 +13,26 @@ const SCHEMA_SQL = `
     stock INTEGER NOT NULL CHECK (stock >= 0),
     published_year INTEGER NOT NULL,
     description TEXT NOT NULL DEFAULT '',
+    cover_url TEXT NOT NULL DEFAULT '',
+    featured INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'admin',
+    created_at TEXT NOT NULL
+  );
+
   CREATE INDEX IF NOT EXISTS idx_books_genre ON books (genre);
+  CREATE INDEX IF NOT EXISTS idx_books_featured ON books (featured);
   CREATE INDEX IF NOT EXISTS idx_books_created_at ON books (created_at);
 `;
 
-export function createDatabase(dbPath = "./data/bookstore.db") {
+export function createDatabase(dbPath = "./data/booksore.db") {
   if (dbPath !== ":memory:") {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   }
