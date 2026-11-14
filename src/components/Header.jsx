@@ -20,7 +20,7 @@ export function Header({
           onClick={() => onNavigate("storefront")}
           aria-label="Booksore home"
         >
-          <span className="brand-name">Booksore</span>
+          <span className="brand-name">Bookstore</span>
           <span className="brand-tag">Independent Bookshop</span>
         </button>
 
