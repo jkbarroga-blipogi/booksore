@@ -10,7 +10,8 @@ function sign(payloadB64, secret) {
 export function createSessionToken(user, secret, ttlMs = DEFAULT_TTL_MS) {
   const payload = {
     sub: user.id,
-    email: user.email,
+    username: user.username || null,
+    email: user.email || null,
     role: user.role,
     exp: Date.now() + ttlMs,
   };

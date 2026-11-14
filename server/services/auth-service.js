@@ -1,6 +1,6 @@
-import { verifyPassword } from "../auth/password.js";
+import { hashPassword, verifyPassword } from "../auth/password.js";
 import { createSessionToken } from "../auth/session.js";
-import { UnauthorizedError } from "../errors/domain-errors.js";
+import { ConflictError, UnauthorizedError } from "../errors/domain-errors.js";
 
 export class AuthService {
   #userRepo;
@@ -11,15 +11,39 @@ export class AuthService {
     this.#sessionSecret = sessionSecret;
   }
 
-  async login({ email, password }) {
-    const user = this.#userRepo.findByEmail(email);
+  async register({ username, password }) {
+    const existing = this.#userRepo.findByUsername(username);
+    if (existing) {
+      throw new ConflictError(`Username "${username}" is already taken`, {
+        code: "USERNAME_TAKEN",
+      });
+    }
+
+    const passwordHash = await hashPassword(password);
+    const user = this.#userRepo.createCustomer({ username, passwordHash });
+    const token = createSessionToken(user, this.#sessionSecret);
+
+    return {
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
+    };
+  }
+
+  async login({ username, email, password }) {
+    const identifier = username || email;
+    const user = this.#userRepo.findByUsernameOrEmail(identifier);
     if (!user) {
-      throw new UnauthorizedError("Invalid email or password");
+      throw new UnauthorizedError("Invalid username or password");
     }
 
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) {
-      throw new UnauthorizedError("Invalid email or password");
+      throw new UnauthorizedError("Invalid username or password");
     }
 
     const token = createSessionToken(user, this.#sessionSecret);
@@ -27,6 +51,7 @@ export class AuthService {
       token,
       user: {
         id: user.id,
+        username: user.username,
         email: user.email,
         role: user.role,
       },

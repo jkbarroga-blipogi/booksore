@@ -11,7 +11,7 @@ export function AdminDashboard({
   onDeleteBook,
   onQuickUpdate,
 }) {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
@@ -21,7 +21,7 @@ export function AdminDashboard({
     setAuthError("");
     setLoggingIn(true);
     try {
-      await onLogin({ email, password });
+      await onLogin({ username: identifier.trim(), email: identifier.trim(), password });
       setPassword("");
     } catch (err) {
       setAuthError(err.message || "Sign in failed");
@@ -37,8 +37,7 @@ export function AdminDashboard({
           Admin Sign In
         </h2>
         <p style={{ margin: "0 0 18px", color: "var(--ink-secondary)", fontSize: "0.9rem" }}>
-          Sign in with your configured store admin account to create, edit, restock, or remove
-          books.
+          Sign in with your configured store admin username or email to manage inventory.
         </p>
 
         {authError && (
@@ -49,13 +48,13 @@ export function AdminDashboard({
 
         <form onSubmit={handleLoginSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           <label className="form-field">
-            <span className="field-label">Admin Email</span>
+            <span className="field-label">Admin Username or Email</span>
             <input
               className="input"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@booksore.local"
+              type="text"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="admin or admin@booksore.local"
               required
             />
           </label>

@@ -169,4 +169,51 @@ describe("Booksore API", () => {
     const updatedBook = await (await fetch(`${baseUrl}/api/v1/books/${inStock.id}`)).json();
     assert.equal(updatedBook.data.stock, inStock.stock - 2);
   });
+
+  it("registers customer with username, logs in, checks out, and fetches my-orders", async () => {
+    const regRes = await fetch(`${baseUrl}/api/v1/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: "maria_clara",
+        password: "securepassword123",
+      }),
+    });
+    assert.equal(regRes.status, 201);
+    const regCookie = regRes.headers.get("set-cookie").split(";")[0];
+    const regBody = await regRes.json();
+    assert.equal(regBody.data.username, "maria_clara");
+    assert.equal(regBody.data.role, "customer");
+
+    const meRes = await fetch(`${baseUrl}/api/v1/auth/me`, {
+      headers: { Cookie: regCookie },
+    });
+    assert.equal(meRes.status, 200);
+    const meBody = await meRes.json();
+    assert.equal(meBody.data.username, "maria_clara");
+    assert.equal(meBody.data.role, "customer");
+
+    const booksRes = await fetch(`${baseUrl}/api/v1/books`);
+    const book = (await booksRes.json()).data.find((b) => b.stock > 0);
+
+    const checkoutRes = await fetch(`${baseUrl}/api/v1/checkout`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: regCookie,
+      },
+      body: JSON.stringify({
+        items: [{ bookId: book.id, quantity: 1 }],
+      }),
+    });
+    assert.equal(checkoutRes.status, 200);
+
+    const ordersRes = await fetch(`${baseUrl}/api/v1/orders/my-orders`, {
+      headers: { Cookie: regCookie },
+    });
+    assert.equal(ordersRes.status, 200);
+    const ordersBody = await ordersRes.json();
+    assert.equal(ordersBody.data.length, 1);
+    assert.equal(ordersBody.data[0].items[0].bookId, book.id);
+  });
 });

@@ -7,10 +7,12 @@ import { CartDrawer } from "./components/CartDrawer.jsx";
 import { AdminDashboard } from "./components/AdminDashboard.jsx";
 import { BookFormModal } from "./components/BookFormModal.jsx";
 import { ConfirmDeleteModal } from "./components/ConfirmDeleteModal.jsx";
+import { AuthModal } from "./components/AuthModal.jsx";
+import { MyOrdersModal } from "./components/MyOrdersModal.jsx";
 
 export function App() {
   const [activeView, setActiveView] = useState("storefront");
-  const [adminUser, setAdminUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   const [books, setBooks] = useState([]);
   const [stats, setStats] = useState({
@@ -39,6 +41,10 @@ export function App() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingBook, setEditingBook] = useState(null);
   const [deletingBook, setDeletingBook] = useState(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [ordersModalOpen, setOrdersModalOpen] = useState(false);
+  const [myOrders, setMyOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [toast, setToast] = useState("");
 
   const showToast = useCallback((message) => {
@@ -91,8 +97,8 @@ export function App() {
   useEffect(() => {
     api
       .getSession()
-      .then((res) => setAdminUser(res.data))
-      .catch(() => setAdminUser(null));
+      .then((res) => setCurrentUser(res.data))
+      .catch(() => setCurrentUser(null));
   }, []);
 
   useEffect(() => {
@@ -163,13 +169,41 @@ export function App() {
 
   async function handleLogin(credentials) {
     const res = await api.login(credentials);
-    setAdminUser(res.data);
-    showToast(`Signed in as ${res.data.email}`);
+    setCurrentUser(res.data);
+    showToast(`Signed in as ${res.data.username || res.data.email}`);
+  }
+
+  async function handleCustomerLogin({ username, password }) {
+    const res = await api.login({ username, password });
+    setCurrentUser(res.data);
+    showToast(`Welcome back, @${res.data.username}`);
+  }
+
+  async function handleCustomerRegister({ username, password }) {
+    const res = await api.register({ username, password });
+    setCurrentUser(res.data);
+    showToast(`Account created! Signed in as @${res.data.username}`);
+  }
+
+  async function handleOpenOrders() {
+    setOrdersModalOpen(true);
+    setOrdersLoading(true);
+    try {
+      const res = await api.getMyOrders();
+      setMyOrders(res.data);
+    } catch (err) {
+      showToast(err.message || "Failed to load orders");
+    } finally {
+      setOrdersLoading(false);
+    }
   }
 
   async function handleLogout() {
     await api.logout();
-    setAdminUser(null);
+    setCurrentUser(null);
+    if (activeView === "admin") {
+      setActiveView("storefront");
+    }
     showToast("Signed out");
   }
 
@@ -210,7 +244,9 @@ export function App() {
         onNavigate={setActiveView}
         cartCount={totalCartItems}
         onOpenCart={() => setCartOpen(true)}
-        adminUser={adminUser}
+        currentUser={currentUser}
+        onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenOrders={handleOpenOrders}
         onLogout={handleLogout}
       />
 
@@ -357,7 +393,7 @@ export function App() {
           </>
         ) : (
           <AdminDashboard
-            adminUser={adminUser}
+            adminUser={currentUser?.role === "admin" ? currentUser : null}
             books={books}
             stats={stats}
             onLogin={handleLogin}
@@ -374,6 +410,21 @@ export function App() {
           />
         )}
       </main>
+
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onLogin={handleCustomerLogin}
+        onRegister={handleCustomerRegister}
+        onSwitchToAdmin={() => setActiveView("admin")}
+      />
+
+      <MyOrdersModal
+        isOpen={ordersModalOpen}
+        onClose={() => setOrdersModalOpen(false)}
+        orders={myOrders}
+        loading={ordersLoading}
+      />
 
       <BookDetailModal
         book={inspectedBook}

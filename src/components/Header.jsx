@@ -3,9 +3,14 @@ export function Header({
   onNavigate,
   cartCount,
   onOpenCart,
-  adminUser,
+  currentUser,
+  onOpenAuth,
+  onOpenOrders,
   onLogout,
 }) {
+  const isAdmin = currentUser?.role === "admin";
+  const isCustomer = currentUser?.role === "customer";
+
   return (
     <header className="site-header">
       <div className="container header-inner">
@@ -28,15 +33,51 @@ export function Header({
             Storefront
           </button>
 
-          <button
-            type="button"
-            className={`nav-pill ${activeView === "admin" ? "active" : ""}`}
-            onClick={() => onNavigate("admin")}
-          >
-            {adminUser ? "Admin Inventory" : "Admin Sign In"}
-          </button>
+          {isCustomer && (
+            <>
+              <span className="nav-pill" style={{ borderColor: "transparent", background: "var(--bg-accent-soft)", color: "var(--brand-primary)" }}>
+                Hi, @{currentUser.username}
+              </span>
+              <button
+                type="button"
+                className="nav-pill"
+                onClick={onOpenOrders}
+              >
+                My Orders
+              </button>
+            </>
+          )}
 
-          {adminUser && (
+          {isAdmin && (
+            <button
+              type="button"
+              className={`nav-pill ${activeView === "admin" ? "active" : ""}`}
+              onClick={() => onNavigate("admin")}
+            >
+              Admin Inventory
+            </button>
+          )}
+
+          {!currentUser && (
+            <>
+              <button
+                type="button"
+                className="nav-pill"
+                onClick={onOpenAuth}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                className={`nav-pill ${activeView === "admin" ? "active" : ""}`}
+                onClick={() => onNavigate("admin")}
+              >
+                Admin
+              </button>
+            </>
+          )}
+
+          {currentUser && (
             <button type="button" className="nav-pill" onClick={onLogout}>
               Sign Out
             </button>

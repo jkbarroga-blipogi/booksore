@@ -197,7 +197,7 @@ export function BookFormModal({ isOpen, editingBook, onClose, onSave }) {
             </label>
 
             <label className="form-field">
-              <span className="field-label">Price (USD)</span>
+              <span className="field-label">Price (PHP)</span>
               <input
                 className="input"
                 type="number"
@@ -205,7 +205,7 @@ export function BookFormModal({ isOpen, editingBook, onClose, onSave }) {
                 min="0"
                 value={form.priceDollars}
                 onChange={(e) => setField("priceDollars", e.target.value)}
-                placeholder="19.99"
+                placeholder="750.00"
                 required
               />
               {fieldErrors.priceCents && (

@@ -96,8 +96,9 @@ describe("repositories", () => {
     assert.equal(bookRepo.findById(bookA.id).stock, 2);
   });
 
-  it("stores and finds admin users by email", () => {
+  it("stores and finds admin users by email or username", () => {
     const user = userRepo.createAdmin({
+      username: "admin",
       email: "admin@booksore.local",
       passwordHash: "salt:hash",
     });
@@ -105,5 +106,39 @@ describe("repositories", () => {
     assert.equal(user.role, "admin");
     assert.equal(userRepo.countAdmins(), 1);
     assert.equal(userRepo.findByEmail("admin@booksore.local").id, user.id);
+    assert.equal(userRepo.findByUsername("admin").id, user.id);
+  });
+
+  it("creates customer accounts and retrieves orders by user id", () => {
+    const customer = userRepo.createCustomer({
+      username: "juan_reader",
+      passwordHash: "salt:custhash",
+    });
+
+    assert.equal(customer.role, "customer");
+    assert.equal(customer.username, "juan_reader");
+    assert.equal(userRepo.findByUsername("juan_reader").id, customer.id);
+
+    const book = bookRepo.create({
+      title: "Noli Me Tangere",
+      author: "Jose Rizal",
+      isbn: "9789710860500",
+      genre: "Historical Fiction",
+      priceCents: 45000,
+      stock: 10,
+      publishedYear: 1887,
+      description: "Touch me not.",
+      coverUrl: "",
+      featured: true,
+    });
+
+    const receipt = bookRepo.checkoutItems([{ bookId: book.id, quantity: 1 }], customer.id);
+    assert.ok(receipt.orderId);
+    assert.equal(receipt.totalCents, 45000);
+
+    const myOrders = bookRepo.getOrdersByUserId(customer.id);
+    assert.equal(myOrders.length, 1);
+    assert.equal(myOrders[0].orderId, receipt.orderId);
+    assert.equal(myOrders[0].totalCents, 45000);
   });
 });

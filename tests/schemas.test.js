@@ -6,6 +6,7 @@ import {
   bookQuerySchema,
   idParamSchema,
   loginSchema,
+  registerSchema,
   checkoutSchema,
 } from "../server/validation/schemas.js";
 
@@ -73,7 +74,11 @@ describe("validation schemas", () => {
   });
 
   it("validates loginSchema and checkoutSchema", () => {
-    assert.equal(loginSchema.safeParse({ email: "bad", password: "" }).success, false);
+    assert.equal(loginSchema.safeParse({ username: "", password: "" }).success, false);
+    assert.equal(
+      loginSchema.safeParse({ username: "booklover", password: "password123" }).success,
+      true,
+    );
     assert.equal(
       loginSchema.safeParse({ email: "admin@booksore.local", password: "secret" }).success,
       true,
@@ -86,5 +91,13 @@ describe("validation schemas", () => {
       }).success,
       true,
     );
+  });
+
+  it("validates registerSchema with alphanumeric username and min password length", () => {
+    assert.equal(registerSchema.safeParse({ username: "ab", password: "123" }).success, false);
+    assert.equal(registerSchema.safeParse({ username: "bad user!", password: "secret123" }).success, false);
+    const valid = registerSchema.safeParse({ username: "book_reader99", password: "mypassword" });
+    assert.equal(valid.success, true);
+    assert.equal(valid.data.username, "book_reader99");
   });
 });

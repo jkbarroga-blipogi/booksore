@@ -1,5 +1,5 @@
 import { SESSION_COOKIE_NAME } from "../auth/session.js";
-import { loginSchema } from "../validation/schemas.js";
+import { loginSchema, registerSchema } from "../validation/schemas.js";
 import { ValidationError } from "../errors/domain-errors.js";
 
 function cookieOptions() {
@@ -14,6 +14,27 @@ function cookieOptions() {
 
 export function createAuthController(authService) {
   return {
+    async register(req, res, next) {
+      try {
+        const parsed = registerSchema.safeParse(req.body);
+        if (!parsed.success) {
+          throw new ValidationError(
+            "Invalid registration payload",
+            parsed.error.issues.map((issue) => ({
+              path: issue.path.join("."),
+              message: issue.message,
+              code: issue.code,
+            })),
+          );
+        }
+        const { token, user } = await authService.register(parsed.data);
+        res.cookie(SESSION_COOKIE_NAME, token, cookieOptions());
+        res.status(201).json({ data: user });
+      } catch (err) {
+        next(err);
+      }
+    },
+
     async login(req, res, next) {
       try {
         const parsed = loginSchema.safeParse(req.body);
@@ -52,7 +73,8 @@ export function createAuthController(authService) {
       return res.status(200).json({
         data: {
           id: req.user.sub,
-          email: req.user.email,
+          username: req.user.username || null,
+          email: req.user.email || null,
           role: req.user.role,
         },
       });

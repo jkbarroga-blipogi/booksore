@@ -5,7 +5,7 @@ import {
   idParamSchema,
   updateBookSchema,
 } from "../validation/schemas.js";
-import { ValidationError } from "../errors/domain-errors.js";
+import { UnauthorizedError, ValidationError } from "../errors/domain-errors.js";
 
 function parseWithSchema(schema, payload) {
   const result = schema.safeParse(payload);
@@ -55,8 +55,16 @@ export function createBookController(bookService) {
 
     checkout(req, res) {
       const { items } = parseWithSchema(checkoutSchema, req.body);
-      const receipt = bookService.checkout(items);
+      const receipt = bookService.checkout(items, req.user?.sub || null);
       res.status(200).json({ data: receipt });
+    },
+
+    myOrders(req, res) {
+      if (!req.user) {
+        throw new UnauthorizedError("Customer sign-in required to view order history");
+      }
+      const orders = bookService.getMyOrders(req.user.sub);
+      res.status(200).json({ data: orders });
     },
   };
 }

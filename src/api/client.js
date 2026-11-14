@@ -40,6 +40,13 @@ export const api = {
     return request("/api/v1/auth/me");
   },
 
+  register(credentials) {
+    return request("/api/v1/auth/register", {
+      method: "POST",
+      body: JSON.stringify(credentials),
+    });
+  },
+
   login(credentials) {
     return request("/api/v1/auth/login", {
       method: "POST",
@@ -51,6 +58,10 @@ export const api = {
     return request("/api/v1/auth/logout", {
       method: "POST",
     });
+  },
+
+  getMyOrders() {
+    return request("/api/v1/orders/my-orders");
   },
 
   listBooks(params = {}) {

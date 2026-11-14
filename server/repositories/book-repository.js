@@ -204,7 +204,7 @@ export class BookRepository {
     };
   }
 
-  checkoutItems(requestedItems) {
+  checkoutItems(requestedItems, userId = null) {
     const merged = new Map();
     for (const item of requestedItems) {
       merged.set(item.bookId, (merged.get(item.bookId) ?? 0) + item.quantity);
@@ -268,11 +268,19 @@ export class BookRepository {
         }
       }
 
+      const totalCents = lineItems.reduce((sum, item) => sum + item.subtotalCents, 0);
+      const orderId = crypto.randomUUID();
+
+      const orderStmt = this.#db.prepare(`
+        INSERT INTO orders (id, user_id, total_cents, items_json, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      orderStmt.run(orderId, userId, totalCents, JSON.stringify(lineItems), now);
+
       this.#db.exec("COMMIT");
 
-      const totalCents = lineItems.reduce((sum, item) => sum + item.subtotalCents, 0);
       return {
-        orderId: crypto.randomUUID(),
+        orderId,
         checkedOutAt: now,
         totalCents,
         items: lineItems,
@@ -281,5 +289,18 @@ export class BookRepository {
       this.#db.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  getOrdersByUserId(userId) {
+    if (!userId) return [];
+    const stmt = this.#db.prepare("SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC");
+    const rows = stmt.all(userId);
+    return rows.map((r) => ({
+      orderId: r.id,
+      userId: r.user_id,
+      totalCents: r.total_cents,
+      items: JSON.parse(r.items_json),
+      createdAt: r.created_at,
+    }));
   }
 }

@@ -63,7 +63,11 @@ export class BookService {
     }
   }
 
-  checkout(items) {
-    return this.#bookRepo.checkoutItems(items);
+  checkout(items, userId = null) {
+    return this.#bookRepo.checkoutItems(items, userId);
+  }
+
+  getMyOrders(userId) {
+    return this.#bookRepo.getOrdersByUserId(userId);
   }
 }

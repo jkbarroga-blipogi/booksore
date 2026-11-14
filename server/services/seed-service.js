@@ -9,7 +9,7 @@ const STARTER_BOOKS = [
     author: "Susanna Clarke",
     isbn: "9781635575637",
     genre: "Literary Fiction",
-    priceCents: 1850,
+    priceCents: 75000,
     stock: 11,
     publishedYear: 2020,
     description:
@@ -22,7 +22,7 @@ const STARTER_BOOKS = [
     author: "Ursula K. Le Guin",
     isbn: "9780441478125",
     genre: "Science Fiction",
-    priceCents: 1799,
+    priceCents: 68000,
     stock: 7,
     publishedYear: 1969,
     description:
@@ -35,7 +35,7 @@ const STARTER_BOOKS = [
     author: "Martin Kleppmann",
     isbn: "9781449373320",
     genre: "Technology",
-    priceCents: 4600,
+    priceCents: 185000,
     stock: 3,
     publishedYear: 2017,
     description:
@@ -48,7 +48,7 @@ const STARTER_BOOKS = [
     author: "Min Jin Lee",
     isbn: "9781455563920",
     genre: "Historical Fiction",
-    priceCents: 1995,
+    priceCents: 79500,
     stock: 9,
     publishedYear: 2017,
     description:
@@ -61,7 +61,7 @@ const STARTER_BOOKS = [
     author: "Robin Wall Kimmerer",
     isbn: "9781571313560",
     genre: "Essays & Nature",
-    priceCents: 2000,
+    priceCents: 82000,
     stock: 14,
     publishedYear: 2013,
     description:
@@ -74,7 +74,7 @@ const STARTER_BOOKS = [
     author: "Christopher Alexander",
     isbn: "9780195024029",
     genre: "Architecture",
-    priceCents: 3850,
+    priceCents: 145000,
     stock: 2,
     publishedYear: 1979,
     description:
@@ -87,7 +87,7 @@ const STARTER_BOOKS = [
     author: "Italo Calvino",
     isbn: "9780156453806",
     genre: "Literary Fiction",
-    priceCents: 1595,
+    priceCents: 59500,
     stock: 0,
     publishedYear: 1972,
     description:
@@ -100,7 +100,7 @@ const STARTER_BOOKS = [
     author: "Andy Weir",
     isbn: "9780593135204",
     genre: "Science Fiction",
-    priceCents: 2299,
+    priceCents: 89900,
     stock: 12,
     publishedYear: 2021,
     description:
@@ -113,7 +113,7 @@ const STARTER_BOOKS = [
     author: "Robert Bringhurst",
     isbn: "9780881792126",
     genre: "Design",
-    priceCents: 3495,
+    priceCents: 125000,
     stock: 5,
     publishedYear: 2012,
     description:
@@ -126,7 +126,7 @@ const STARTER_BOOKS = [
     author: "Yuval Noah Harari",
     isbn: "9780062316110",
     genre: "History",
-    priceCents: 2499,
+    priceCents: 95000,
     stock: 8,
     publishedYear: 2015,
     description:
@@ -153,12 +153,12 @@ export async function seedDatabase(db, options = {}) {
 
     if (email && password) {
       const passwordHash = await hashPassword(password);
-      userRepo.createAdmin({ email, passwordHash });
+      userRepo.createAdmin({ username: "admin", email, passwordHash });
     } else if (process.env.NODE_ENV !== "production") {
       const fallbackEmail = email || "admin@booksore.local";
       password = crypto.randomBytes(12).toString("hex");
       const passwordHash = await hashPassword(password);
-      userRepo.createAdmin({ email: fallbackEmail, passwordHash });
+      userRepo.createAdmin({ username: "admin", email: fallbackEmail, passwordHash });
       if (!options.silent) {
         console.info(
           JSON.stringify({

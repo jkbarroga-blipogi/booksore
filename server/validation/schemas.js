@@ -90,10 +90,27 @@ export const idParamSchema = z.object({
   id: z.string().uuid("Invalid book ID format"),
 });
 
-export const loginSchema = z.object({
-  email: z.string().trim().email("Valid email is required").max(200).toLowerCase(),
-  password: z.string().min(1, "Password is required").max(200),
+export const registerSchema = z.object({
+  username: z
+    .string()
+    .trim()
+    .min(3, "Username must be at least 3 characters")
+    .max(30, "Username must be at most 30 characters")
+    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores")
+    .toLowerCase(),
+  password: z.string().min(6, "Password must be at least 6 characters").max(200),
 });
+
+export const loginSchema = z
+  .object({
+    username: z.string().trim().min(1).max(200).optional(),
+    email: z.string().trim().max(200).optional(),
+    password: z.string().min(1, "Password is required").max(200),
+  })
+  .refine((data) => Boolean(data.username || data.email), {
+    message: "Username or email is required",
+    path: ["username"],
+  });
 
 export const checkoutSchema = z.object({
   items: z

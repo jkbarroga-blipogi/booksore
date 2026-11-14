@@ -11,6 +11,7 @@ export function createApiRouter({ bookController, authController, requireAdmin }
     });
   });
 
+  router.post("/auth/register", authController.register);
   router.post("/auth/login", authController.login);
   router.post("/auth/logout", authController.logout);
   router.get("/auth/me", authController.me);
@@ -22,6 +23,7 @@ export function createApiRouter({ bookController, authController, requireAdmin }
   router.delete("/books/:id", requireAdmin, bookController.remove);
 
   router.post("/checkout", bookController.checkout);
+  router.get("/orders/my-orders", bookController.myOrders);
 
   return router;
 }
