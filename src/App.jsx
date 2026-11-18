@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api/client.js";
+import { resolveAccessPath } from "./access-routes.js";
 import { useRouter } from "./router.js";
 import { Header } from "./components/Header.jsx";
+import { AdminHeader } from "./components/AdminHeader.jsx";
 import { BookCard } from "./components/BookCard.jsx";
 import { BookDetailModal } from "./components/BookDetailModal.jsx";
 import { CartDrawer } from "./components/CartDrawer.jsx";
@@ -12,8 +14,6 @@ import { ConfirmRoleModal } from "./components/ConfirmRoleModal.jsx";
 import { AuthPage } from "./components/AuthPage.jsx";
 import { MyOrdersModal } from "./components/MyOrdersModal.jsx";
 
-const AUTH_ROUTES = ["/login", "/signup"];
-const KNOWN_ROUTES = ["/login", "/signup", "/store", "/admin"];
 const EMPTY_USERS_META = { page: 1, limit: 20, total: 0, totalPages: 1 };
 
 function sameSession(previous, next) {
@@ -72,9 +72,10 @@ export function App() {
   const [userFilters, setUserFilters] = useState({ q: "", page: 1 });
   const [roleTarget, setRoleTarget] = useState(null);
 
-  const isAdmin = currentUser?.role === "admin";
-  const isAuthRoute = AUTH_ROUTES.includes(path);
-  const activeView = path === "/admin" ? "admin" : "store";
+  const accessPath = resolveAccessPath(path, currentUser?.role);
+  const showAdmin = sessionReady && path === "/admin" && accessPath === path;
+  const showStore = sessionReady && path === "/store" && accessPath === path;
+  const isAdminLogin = path === "/admin/login";
 
   const showToast = useCallback((message) => {
     setToast(message);
@@ -131,41 +132,24 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!sessionReady) return;
-
-    if (!KNOWN_ROUTES.includes(path)) {
-      navigate(currentUser ? "/store" : "/login", { replace: true });
-      return;
+    if (sessionReady && path !== accessPath) {
+      navigate(accessPath, { replace: true });
     }
-
-    if (!currentUser && !isAuthRoute) {
-      navigate("/login", { replace: true });
-      return;
-    }
-
-    if (currentUser && isAuthRoute) {
-      navigate("/store", { replace: true });
-      return;
-    }
-
-    if (currentUser && path === "/admin" && !isAdmin) {
-      navigate("/store", { replace: true });
-      showToast("Admin tools are limited to administrator accounts.");
-    }
-  }, [sessionReady, currentUser, path, isAuthRoute, isAdmin, navigate, showToast]);
+  }, [sessionReady, path, accessPath, navigate]);
 
   useEffect(() => {
     const titles = {
       "/login": "Sign in | Booksore",
       "/signup": "Create account | Booksore",
       "/store": "Storefront | Booksore",
+      "/admin/login": "Admin sign-in | Booksore",
       "/admin": "Admin desk | Booksore",
     };
     document.title = titles[path] || "Booksore | Independent Bookshop";
   }, [path]);
 
   const fetchCatalog = useCallback(async () => {
-    if (!currentUser) return;
+    if (!showStore && !showAdmin) return;
     setLoading(true);
     setLoadError("");
     try {
@@ -176,8 +160,8 @@ export function App() {
         inStock: filters.inStock ? "true" : undefined,
         sort,
         order,
-        page: path === "/admin" ? 1 : filters.page,
-        limit: path === "/admin" ? 100 : 12,
+        page: showAdmin ? 1 : filters.page,
+        limit: showAdmin ? 100 : 12,
       });
       setBooks(res.data);
       setMeta(res.meta);
@@ -198,19 +182,16 @@ export function App() {
     } catch (err) {
       if (err.status === 401) {
         setCurrentUser(null);
-        navigate("/login", { replace: true });
         return;
       }
       setLoadError(err.message || "Unable to load the catalog.");
     } finally {
       setLoading(false);
     }
-  }, [currentUser, filters, path, navigate]);
+  }, [showStore, showAdmin, filters]);
 
   useEffect(() => {
-    if (currentUser && (path === "/store" || path === "/admin")) {
-      fetchCatalog();
-    }
+    fetchCatalog();
   }, [currentUser, path, fetchCatalog]);
 
   const loadUsers = useCallback(async (nextFilters) => {
@@ -232,10 +213,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (sessionReady && isAdmin && path === "/admin") {
+    if (showAdmin) {
       loadUsers(userFilters);
     }
-  }, [sessionReady, isAdmin, path, userFilters, loadUsers]);
+  }, [currentUser, showAdmin, userFilters, loadUsers]);
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -300,15 +281,17 @@ export function App() {
   }
 
   async function handleLogin(credentials) {
-    const res = await api.login(credentials);
+    const res = await (isAdminLogin ? api.loginAdmin(credentials) : api.login(credentials));
+    clearPortalState();
     setCurrentUser(res.data);
     setFilters((previous) => ({ ...previous, page: 1 }));
-    navigate("/store");
+    navigate(isAdminLogin ? "/admin" : "/store", { replace: true });
     showToast(`Signed in as @${res.data.username || res.data.email}`);
   }
 
   async function handleRegister(credentials) {
     const res = await api.register(credentials);
+    clearPortalState();
     setCurrentUser(res.data);
     navigate("/store");
     showToast(`Account created. Welcome, @${res.data.username}`);
@@ -327,21 +310,34 @@ export function App() {
     }
   }
 
-  async function handleLogout() {
-    try {
-      await api.logout();
-      showToast("Signed out");
-    } catch {
-      showToast("Signed out on this device. The server could not be reached.");
-    }
-    setCurrentUser(null);
+  function clearPortalState() {
     setCart([]);
+    setCartOpen(false);
     setBooks([]);
     setLoading(true);
+    setInspectedBook(null);
+    setOrdersModalOpen(false);
+    setMyOrders([]);
+    setFormOpen(false);
+    setEditingBook(null);
+    setDeletingBook(null);
+    setRoleTarget(null);
     setUsers([]);
     setUsersMeta(EMPTY_USERS_META);
     setUserFilters({ q: "", page: 1 });
-    navigate("/login", { replace: true });
+  }
+
+  async function handleLogout() {
+    try {
+      await api.logout();
+    } catch {
+      showToast("Could not sign out. Try again.");
+      return;
+    }
+    clearPortalState();
+    setCurrentUser(null);
+    showToast("Signed out");
+    navigate(showAdmin ? "/admin/login" : "/login", { replace: true });
   }
 
   async function handleSaveBook(payload) {
@@ -392,9 +388,7 @@ export function App() {
   }
 
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const showShell = currentUser && !isAuthRoute;
-
-  if (!sessionReady) {
+  if (!sessionReady || path !== accessPath) {
     return (
       <div className="boot-screen" role="status" aria-live="polite">
         <span className="auth-mark">B</span>
@@ -409,20 +403,23 @@ export function App() {
         Skip to content
       </a>
 
-      {showShell ? (
+      {showStore || showAdmin ? (
         <>
-          <Header
-            activeView={activeView}
-            onNavigate={navigate}
-            cartCount={totalCartItems}
-            onOpenCart={() => setCartOpen(true)}
-            currentUser={currentUser}
-            onOpenOrders={handleOpenOrders}
-            onLogout={handleLogout}
-          />
+          {showAdmin ? (
+            <AdminHeader currentUser={currentUser} onLogout={handleLogout} />
+          ) : (
+            <Header
+              onNavigate={navigate}
+              cartCount={totalCartItems}
+              onOpenCart={() => setCartOpen(true)}
+              currentUser={currentUser}
+              onOpenOrders={handleOpenOrders}
+              onLogout={handleLogout}
+            />
+          )}
 
           <main id="main-content" className="main-content container" tabIndex="-1">
-            {path === "/admin" && isAdmin ? (
+            {showAdmin ? (
               <AdminDashboard
                 adminUser={currentUser}
                 books={books}
@@ -610,7 +607,7 @@ export function App() {
       ) : (
         <AuthPage
           key={path}
-          mode={path === "/signup" ? "register" : "login"}
+          mode={isAdminLogin ? "admin" : path === "/signup" ? "register" : "login"}
           onLogin={handleLogin}
           onRegister={handleRegister}
           onNavigate={navigate}
@@ -618,21 +615,21 @@ export function App() {
       )}
 
       <MyOrdersModal
-        isOpen={ordersModalOpen}
+        isOpen={showStore && ordersModalOpen}
         onClose={() => setOrdersModalOpen(false)}
         orders={myOrders}
         loading={ordersLoading}
       />
 
       <BookDetailModal
-        book={inspectedBook}
+        book={showStore ? inspectedBook : null}
         cartQty={inspectedBook ? getCartQty(inspectedBook.id) : 0}
         onClose={() => setInspectedBook(null)}
         onAddToCart={handleAddToCart}
       />
 
       <CartDrawer
-        isOpen={cartOpen}
+        isOpen={showStore && cartOpen}
         items={cart}
         onClose={() => setCartOpen(false)}
         onUpdateQty={handleUpdateCartQty}
@@ -641,20 +638,20 @@ export function App() {
       />
 
       <BookFormModal
-        isOpen={formOpen}
+        isOpen={showAdmin && formOpen}
         editingBook={editingBook}
         onClose={() => setFormOpen(false)}
         onSave={handleSaveBook}
       />
 
       <ConfirmDeleteModal
-        book={deletingBook}
+        book={showAdmin ? deletingBook : null}
         onClose={() => setDeletingBook(null)}
         onConfirm={handleConfirmDelete}
       />
 
       <ConfirmRoleModal
-        user={roleTarget}
+        user={showAdmin ? roleTarget : null}
         onClose={closeRoleModal}
         onConfirm={handleRoleChange}
       />

@@ -19,6 +19,7 @@ export function createApiRouter({
 
   router.post("/auth/register", authController.register);
   router.post("/auth/login", authController.login);
+  router.post("/auth/admin/login", authController.loginAdmin);
   router.post("/auth/logout", authController.logout);
   router.get("/auth/me", authController.me);
 

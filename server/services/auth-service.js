@@ -1,6 +1,6 @@
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { createSessionToken } from "../auth/session.js";
-import { ConflictError, UnauthorizedError } from "../errors/domain-errors.js";
+import { ConflictError, ForbiddenError, UnauthorizedError } from "../errors/domain-errors.js";
 
 export class AuthService {
   #userRepo;
@@ -34,7 +34,7 @@ export class AuthService {
     };
   }
 
-  async login({ username, email, password }) {
+  async login({ username, email, password }, requiredRole) {
     const identifier = username || email;
     const user = this.#userRepo.findByUsernameOrEmail(identifier);
     if (!user) {
@@ -44,6 +44,14 @@ export class AuthService {
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) {
       throw new UnauthorizedError("Invalid username or password");
+    }
+
+    if (user.role !== requiredRole) {
+      throw new ForbiddenError(
+        requiredRole === "admin"
+          ? "This sign-in is for admin accounts only."
+          : "This sign-in is for customer accounts only.",
+      );
     }
 
     const token = createSessionToken(user, this.#sessionSecret);

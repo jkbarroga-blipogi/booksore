@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 
 const COPY = {
+  admin: {
+    eyebrow: "Staff only",
+    title: "Admin sign-in",
+    description: "Sign in with an admin account to manage inventory and member roles.",
+    submitLabel: "Sign in as admin",
+    loadingLabel: "Signing in...",
+  },
   login: {
     eyebrow: "Members only",
     title: "Welcome back to the shop.",
@@ -36,6 +43,8 @@ export function AuthPage({ mode = "login", onLogin, onRegister, onNavigate }) {
   const [loading, setLoading] = useState(false);
 
   const isRegister = mode === "register";
+  const isAdminLogin = mode === "admin";
+  const brandName = isAdminLogin ? "Booksore Admin" : "Booksore";
 
   useEffect(() => {
     const field = document.getElementById(isRegister ? "signup-username" : "login-identifier");
@@ -90,17 +99,18 @@ export function AuthPage({ mode = "login", onLogin, onRegister, onNavigate }) {
         <div className="auth-brand-top">
           <span className="auth-mark">B</span>
           <div>
-            <p className="auth-brand-name">Booksore</p>
-            <p className="auth-brand-caption">Independent Bookshop</p>
+            <p className="auth-brand-name">{brandName}</p>
+            <p className="auth-brand-caption">{isAdminLogin ? "Staff access" : "Independent Bookshop"}</p>
           </div>
         </div>
 
         <div className="auth-brand-copy">
-          <p className="auth-eyebrow">Private shelves, open minds</p>
-          <h1 className="auth-display">A quiet room for every reader.</h1>
+          <p className="auth-eyebrow">{isAdminLogin ? "Staff workspace" : "Private shelves, open minds"}</p>
+          <p className="auth-display">{isAdminLogin ? "Bookstore administration" : "A quiet room for every reader."}</p>
           <p className="auth-lede">
-            Signed-in members can browse curated titles, follow live stock, and keep a record
-            of every order.
+            {isAdminLogin
+              ? "Manage the catalog, track stock, and update member roles."
+              : "Signed-in members can browse curated titles, follow live stock, and keep a record of every order."}
           </p>
         </div>
 
@@ -114,14 +124,14 @@ export function AuthPage({ mode = "login", onLogin, onRegister, onNavigate }) {
           <span className="shelf-book shelf-book-g" />
         </div>
 
-        <p className="auth-quote">A good book is a quiet door.</p>
+        {!isAdminLogin && <p className="auth-quote">A good book is a quiet door.</p>}
       </section>
 
       <section className="auth-form-panel" aria-labelledby="auth-title">
         <div className="auth-form-inner">
           <div className="auth-mobile-brand">
             <span className="auth-mark">B</span>
-            <span className="auth-brand-name">Booksore</span>
+            <span className="auth-brand-name">{brandName}</span>
           </div>
 
           <p className="auth-eyebrow">{copy.eyebrow}</p>
@@ -166,7 +176,7 @@ export function AuthPage({ mode = "login", onLogin, onRegister, onNavigate }) {
                   autoComplete="username"
                   value={identifier}
                   onChange={(event) => setIdentifier(event.target.value)}
-                  placeholder="your username or member email"
+                  placeholder={isAdminLogin ? "your admin username or email" : "your username or member email"}
                   id="login-identifier"
                   required
                 />
@@ -219,17 +229,14 @@ export function AuthPage({ mode = "login", onLogin, onRegister, onNavigate }) {
             </button>
           </form>
 
-          <div className="auth-switch">
-            <span>{copy.switchPrompt}</span>
-            <button type="button" className="link-button" onClick={switchMode} disabled={loading}>
-              {copy.switchLabel}
-            </button>
-          </div>
-
-          <p className="auth-footnote">
-            Staff accounts use the same sign-in form. Admin tools appear only for accounts
-            with an administrator role.
-          </p>
+          {!isAdminLogin && (
+            <div className="auth-switch">
+              <span>{copy.switchPrompt}</span>
+              <button type="button" className="link-button" onClick={switchMode} disabled={loading}>
+                {copy.switchLabel}
+              </button>
+            </div>
+          )}
         </div>
       </section>
     </main>

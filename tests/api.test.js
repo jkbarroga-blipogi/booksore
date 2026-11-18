@@ -39,7 +39,7 @@ describe("Booksore API", () => {
   });
 
   async function loginAsAdmin() {
-    const res = await fetch(`${baseUrl}/api/v1/auth/login`, {
+    const res = await fetch(`${baseUrl}/api/v1/auth/admin/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(adminCreds),
@@ -100,7 +100,7 @@ describe("Booksore API", () => {
   });
 
   it("allows authenticated admin CRUD and blocks bad credentials", async () => {
-    const badLogin = await fetch(`${baseUrl}/api/v1/auth/login`, {
+    const badLogin = await fetch(`${baseUrl}/api/v1/auth/admin/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: adminCreds.email, password: "wrong" }),
@@ -159,6 +159,35 @@ describe("Booksore API", () => {
       headers: { Cookie: cookie },
     });
     assert.equal(delRes.status, 204);
+  });
+
+  it("accepts credentials only at the sign-in for the account's role", async () => {
+    const username = "customer_reader";
+    await registerCustomer(username);
+    const customerCreds = { username, password: "securepassword123" };
+    const login = (path, credentials) =>
+      fetch(`${baseUrl}/api/v1/auth/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(credentials),
+      });
+
+    for (const [path, credentials] of [
+      ["login", adminCreds],
+      ["admin/login", customerCreds],
+    ]) {
+      const response = await login(path, credentials);
+      assert.equal(response.status, 403);
+      assert.equal(response.headers.get("set-cookie"), null);
+      assert.equal((await response.json()).error.code, "FORBIDDEN");
+    }
+
+    const readerLogin = await login("login", customerCreds);
+    assert.equal(readerLogin.status, 200);
+    assert.ok(readerLogin.headers.get("set-cookie"));
+    assert.equal((await readerLogin.json()).data.role, "customer");
+
+    await loginAsAdmin();
   });
 
   it("handles checkout atomically and returns 409 for out-of-stock items", async () => {

@@ -13,6 +13,29 @@ function cookieOptions() {
 }
 
 export function createAuthController(authService) {
+  function loginForRole(role) {
+    return async (req, res, next) => {
+      try {
+        const parsed = loginSchema.safeParse(req.body);
+        if (!parsed.success) {
+          throw new ValidationError(
+            "Invalid login payload",
+            parsed.error.issues.map((issue) => ({
+              path: issue.path.join("."),
+              message: issue.message,
+              code: issue.code,
+            })),
+          );
+        }
+        const { token, user } = await authService.login(parsed.data, role);
+        res.cookie(SESSION_COOKIE_NAME, token, cookieOptions());
+        res.status(200).json({ data: user });
+      } catch (err) {
+        next(err);
+      }
+    };
+  }
+
   return {
     async register(req, res, next) {
       try {
@@ -35,26 +58,8 @@ export function createAuthController(authService) {
       }
     },
 
-    async login(req, res, next) {
-      try {
-        const parsed = loginSchema.safeParse(req.body);
-        if (!parsed.success) {
-          throw new ValidationError(
-            "Invalid login payload",
-            parsed.error.issues.map((issue) => ({
-              path: issue.path.join("."),
-              message: issue.message,
-              code: issue.code,
-            })),
-          );
-        }
-        const { token, user } = await authService.login(parsed.data);
-        res.cookie(SESSION_COOKIE_NAME, token, cookieOptions());
-        res.status(200).json({ data: user });
-      } catch (err) {
-        next(err);
-      }
-    },
+    login: loginForRole("customer"),
+    loginAdmin: loginForRole("admin"),
 
     logout(_req, res) {
       res.clearCookie(SESSION_COOKIE_NAME, {

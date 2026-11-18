@@ -32,7 +32,11 @@ async function request(path, options = {}) {
 
   if (!response.ok) {
     const err = payload?.error;
-    throw new ApiError(err?.message || "Request failed", {
+    const fallbackMessage =
+      response.status >= 500
+        ? "The server is unavailable right now. Try again in a moment."
+        : "Request failed";
+    throw new ApiError(err?.message || fallbackMessage, {
       status: response.status,
       code: err?.code,
       details: err?.details,
@@ -56,6 +60,13 @@ export const api = {
 
   login(credentials) {
     return request("/api/v1/auth/login", {
+      method: "POST",
+      body: JSON.stringify(credentials),
+    });
+  },
+
+  loginAdmin(credentials) {
+    return request("/api/v1/auth/admin/login", {
       method: "POST",
       body: JSON.stringify(credentials),
     });
