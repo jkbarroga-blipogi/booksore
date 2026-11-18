@@ -52,14 +52,32 @@ describe("Booksore API", () => {
     return setCookie.split(";")[0];
   }
 
-  it("allows public read and rejects unauthenticated admin mutations", async () => {
+  async function registerCustomer(username = "maria_clara") {
+    const res = await fetch(`${baseUrl}/api/v1/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password: "securepassword123" }),
+    });
+    assert.equal(res.status, 201);
+    const cookie = res.headers.get("set-cookie").split(";")[0];
+    const body = await res.json();
+    return { cookie, user: body.data };
+  }
+
+  it("locks the catalog behind sign-in and rejects unauthenticated admin mutations", async () => {
     const health = await fetch(`${baseUrl}/api/v1/health`);
     assert.equal(health.status, 200);
 
     const listRes = await fetch(`${baseUrl}/api/v1/books`);
-    assert.equal(listRes.status, 200);
-    const listBody = await listRes.json();
-    assert.ok(listBody.data.length >= 1);
+    assert.equal(listRes.status, 401);
+    assert.equal((await listRes.json()).error.code, "UNAUTHORIZED");
+
+    const checkoutRes = await fetch(`${baseUrl}/api/v1/checkout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: [] }),
+    });
+    assert.equal(checkoutRes.status, 401);
 
     const createRes = await fetch(`${baseUrl}/api/v1/books`, {
       method: "POST",
@@ -75,6 +93,10 @@ describe("Booksore API", () => {
       }),
     });
     assert.equal(createRes.status, 401);
+
+    const meRes = await fetch(`${baseUrl}/api/v1/auth/me`);
+    assert.equal(meRes.status, 200);
+    assert.equal((await meRes.json()).data, null);
   });
 
   it("allows authenticated admin CRUD and blocks bad credentials", async () => {
@@ -93,6 +115,12 @@ describe("Booksore API", () => {
     assert.equal(meRes.status, 200);
     const meBody = await meRes.json();
     assert.equal(meBody.data.email, adminCreds.email);
+
+    const listRes = await fetch(`${baseUrl}/api/v1/books`, {
+      headers: { Cookie: cookie },
+    });
+    assert.equal(listRes.status, 200);
+    assert.ok((await listRes.json()).data.length >= 1);
 
     const createRes = await fetch(`${baseUrl}/api/v1/books`, {
       method: "POST",
@@ -134,7 +162,10 @@ describe("Booksore API", () => {
   });
 
   it("handles checkout atomically and returns 409 for out-of-stock items", async () => {
-    const listBody = await (await fetch(`${baseUrl}/api/v1/books?limit=50`)).json();
+    const { cookie } = await registerCustomer("checkout_reader");
+    const listBody = await (
+      await fetch(`${baseUrl}/api/v1/books?limit=50`, { headers: { Cookie: cookie } })
+    ).json();
     const outOfStock = listBody.data.find((b) => b.stock === 0);
     const inStock = listBody.data.find((b) => b.stock >= 2);
 
@@ -143,7 +174,7 @@ describe("Booksore API", () => {
 
     const failCheckout = await fetch(`${baseUrl}/api/v1/checkout`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({
         items: [
           { bookId: inStock.id, quantity: 1 },
@@ -157,7 +188,7 @@ describe("Booksore API", () => {
 
     const okCheckout = await fetch(`${baseUrl}/api/v1/checkout`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Cookie: cookie },
       body: JSON.stringify({
         items: [{ bookId: inStock.id, quantity: 2 }],
       }),
@@ -166,24 +197,16 @@ describe("Booksore API", () => {
     const okBody = await okCheckout.json();
     assert.equal(okBody.data.totalCents, inStock.priceCents * 2);
 
-    const updatedBook = await (await fetch(`${baseUrl}/api/v1/books/${inStock.id}`)).json();
+    const updatedBook = await (
+      await fetch(`${baseUrl}/api/v1/books/${inStock.id}`, { headers: { Cookie: cookie } })
+    ).json();
     assert.equal(updatedBook.data.stock, inStock.stock - 2);
   });
 
   it("registers customer with username, logs in, checks out, and fetches my-orders", async () => {
-    const regRes = await fetch(`${baseUrl}/api/v1/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        username: "maria_clara",
-        password: "securepassword123",
-      }),
-    });
-    assert.equal(regRes.status, 201);
-    const regCookie = regRes.headers.get("set-cookie").split(";")[0];
-    const regBody = await regRes.json();
-    assert.equal(regBody.data.username, "maria_clara");
-    assert.equal(regBody.data.role, "customer");
+    const { cookie: regCookie, user } = await registerCustomer();
+    assert.equal(user.username, "maria_clara");
+    assert.equal(user.role, "customer");
 
     const meRes = await fetch(`${baseUrl}/api/v1/auth/me`, {
       headers: { Cookie: regCookie },
@@ -193,7 +216,10 @@ describe("Booksore API", () => {
     assert.equal(meBody.data.username, "maria_clara");
     assert.equal(meBody.data.role, "customer");
 
-    const booksRes = await fetch(`${baseUrl}/api/v1/books`);
+    const booksRes = await fetch(`${baseUrl}/api/v1/books`, {
+      headers: { Cookie: regCookie },
+    });
+    assert.equal(booksRes.status, 200);
     const book = (await booksRes.json()).data.find((b) => b.stock > 0);
 
     const checkoutRes = await fetch(`${baseUrl}/api/v1/checkout`, {
@@ -215,5 +241,83 @@ describe("Booksore API", () => {
     const ordersBody = await ordersRes.json();
     assert.equal(ordersBody.data.length, 1);
     assert.equal(ordersBody.data[0].items[0].bookId, book.id);
+  });
+
+  it("limits member management to admins and applies role changes to live sessions", async () => {
+    const { cookie: customerCookie, user: customer } = await registerCustomer("role_reader");
+
+    const forbiddenList = await fetch(`${baseUrl}/api/v1/users`, {
+      headers: { Cookie: customerCookie },
+    });
+    assert.equal(forbiddenList.status, 403);
+
+    const forbiddenPatch = await fetch(`${baseUrl}/api/v1/users/${customer.id}/role`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: customerCookie },
+      body: JSON.stringify({ role: "admin" }),
+    });
+    assert.equal(forbiddenPatch.status, 403);
+
+    const adminCookie = await loginAsAdmin();
+    const listRes = await fetch(`${baseUrl}/api/v1/users`, {
+      headers: { Cookie: adminCookie },
+    });
+    assert.equal(listRes.status, 200);
+    const listBody = await listRes.json();
+    assert.ok(listBody.data.length >= 2);
+    assert.ok(listBody.data.every((user) => user.passwordHash === undefined));
+    const adminUser = listBody.data.find((user) => user.email === adminCreds.email);
+    assert.ok(adminUser);
+
+    const promoteRes = await fetch(`${baseUrl}/api/v1/users/${customer.id}/role`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: adminCookie },
+      body: JSON.stringify({ role: "admin" }),
+    });
+    assert.equal(promoteRes.status, 200);
+    assert.equal((await promoteRes.json()).data.role, "admin");
+
+    const promotedMe = await fetch(`${baseUrl}/api/v1/auth/me`, {
+      headers: { Cookie: customerCookie },
+    });
+    assert.equal((await promotedMe.json()).data.role, "admin");
+
+    const demoteRes = await fetch(`${baseUrl}/api/v1/users/${customer.id}/role`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: adminCookie },
+      body: JSON.stringify({ role: "customer" }),
+    });
+    assert.equal(demoteRes.status, 200);
+    assert.equal((await demoteRes.json()).data.role, "customer");
+
+    const demotedMe = await fetch(`${baseUrl}/api/v1/auth/me`, {
+      headers: { Cookie: customerCookie },
+    });
+    assert.equal((await demotedMe.json()).data.role, "customer");
+
+    const selfDemote = await fetch(`${baseUrl}/api/v1/users/${adminUser.id}/role`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: adminCookie },
+      body: JSON.stringify({ role: "customer" }),
+    });
+    assert.equal(selfDemote.status, 409);
+    assert.equal((await selfDemote.json()).error.code, "SELF_ROLE_CHANGE");
+
+    const invalidRole = await fetch(`${baseUrl}/api/v1/users/${customer.id}/role`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Cookie: adminCookie },
+      body: JSON.stringify({ role: "owner" }),
+    });
+    assert.equal(invalidRole.status, 422);
+
+    const missingUser = await fetch(
+      `${baseUrl}/api/v1/users/550e8400-e29b-41d4-a716-446655440000/role`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Cookie: adminCookie },
+        body: JSON.stringify({ role: "admin" }),
+      },
+    );
+    assert.equal(missingUser.status, 404);
   });
 });

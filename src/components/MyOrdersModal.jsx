@@ -1,6 +1,9 @@
 import { formatPrice } from "../utils/format.js";
+import { useDialogFocus } from "../hooks/useDialogFocus.js";
 
 export function MyOrdersModal({ isOpen, onClose, orders, loading }) {
+  useDialogFocus(isOpen, onClose, '[data-dialog="orders"]');
+
   if (!isOpen) return null;
 
   return (
@@ -13,10 +16,10 @@ export function MyOrdersModal({ isOpen, onClose, orders, loading }) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="modal-panel" style={{ maxWidth: "580px" }}>
+      <div className="modal-panel" style={{ maxWidth: "580px" }} data-dialog="orders" tabIndex={-1}>
         <div className="modal-header">
           <h2 id="orders-modal-title" className="modal-title">
-            My Past Orders
+            My orders
           </h2>
           <button type="button" className="close-btn" onClick={onClose} aria-label="Close orders">
             x
@@ -27,7 +30,7 @@ export function MyOrdersModal({ isOpen, onClose, orders, loading }) {
           <div className="empty-state">Loading your order history...</div>
         ) : orders.length === 0 ? (
           <div className="empty-state">
-            No orders found yet. Add books to your cart and complete checkout while signed in!
+            No orders yet. Add books to your cart and complete checkout while signed in.
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -58,7 +61,7 @@ export function MyOrdersModal({ isOpen, onClose, orders, loading }) {
                 </div>
 
                 <div style={{ borderTop: "1px solid var(--border-subtle)", paddingTop: "8px", display: "flex", justifyContent: "space-between", fontWeight: 700 }}>
-                  <span>Total Paid</span>
+                  <span>Total paid</span>
                   <span style={{ color: "var(--brand-primary)" }}>{formatPrice(order.totalCents)}</span>
                 </div>
               </div>

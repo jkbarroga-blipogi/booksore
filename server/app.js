@@ -8,9 +8,11 @@ import { BookRepository } from "./repositories/book-repository.js";
 import { UserRepository } from "./repositories/user-repository.js";
 import { BookService } from "./services/book-service.js";
 import { AuthService } from "./services/auth-service.js";
+import { UserService } from "./services/user-service.js";
 import { createAuthMiddleware } from "./middleware/auth-middleware.js";
 import { createBookController } from "./controllers/book-controller.js";
 import { createAuthController } from "./controllers/auth-controller.js";
+import { createUserController } from "./controllers/user-controller.js";
 import { createApiRouter } from "./routes/api-routes.js";
 
 export function createApp({ db, sessionSecret, silentLogs = false, staticDir } = {}) {
@@ -64,13 +66,24 @@ export function createApp({ db, sessionSecret, silentLogs = false, staticDir } =
   const userRepo = new UserRepository(db);
   const bookService = new BookService(bookRepo);
   const authService = new AuthService(userRepo, secret);
+  const userService = new UserService(userRepo);
 
-  const { attachSession, requireAdmin } = createAuthMiddleware(secret);
+  const { attachSession, requireAuth, requireAdmin } = createAuthMiddleware(secret, userRepo);
   const bookController = createBookController(bookService);
   const authController = createAuthController(authService);
+  const userController = createUserController(userService);
 
   app.use(attachSession);
-  app.use("/api/v1", createApiRouter({ bookController, authController, requireAdmin }));
+  app.use(
+    "/api/v1",
+    createApiRouter({
+      bookController,
+      authController,
+      userController,
+      requireAuth,
+      requireAdmin,
+    }),
+  );
 
   app.use("/api", (_req, res) => {
     res.status(404).json({

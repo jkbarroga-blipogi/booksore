@@ -1,6 +1,12 @@
 import { Router } from "express";
 
-export function createApiRouter({ bookController, authController, requireAdmin }) {
+export function createApiRouter({
+  bookController,
+  authController,
+  userController,
+  requireAuth,
+  requireAdmin,
+}) {
   const router = Router();
 
   router.get("/health", (_req, res) => {
@@ -16,14 +22,17 @@ export function createApiRouter({ bookController, authController, requireAdmin }
   router.post("/auth/logout", authController.logout);
   router.get("/auth/me", authController.me);
 
-  router.get("/books", bookController.list);
-  router.get("/books/:id", bookController.getById);
+  router.get("/books", requireAuth, bookController.list);
+  router.get("/books/:id", requireAuth, bookController.getById);
   router.post("/books", requireAdmin, bookController.create);
   router.patch("/books/:id", requireAdmin, bookController.update);
   router.delete("/books/:id", requireAdmin, bookController.remove);
 
-  router.post("/checkout", bookController.checkout);
-  router.get("/orders/my-orders", bookController.myOrders);
+  router.post("/checkout", requireAuth, bookController.checkout);
+  router.get("/orders/my-orders", requireAuth, bookController.myOrders);
+
+  router.get("/users", requireAdmin, userController.list);
+  router.patch("/users/:id/role", requireAdmin, userController.updateRole);
 
   return router;
 }

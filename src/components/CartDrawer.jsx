@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { formatPrice } from "../utils/format.js";
+import { useDialogFocus } from "../hooks/useDialogFocus.js";
 
 export function CartDrawer({
   isOpen,
@@ -13,6 +14,7 @@ export function CartDrawer({
   const [errorMsg, setErrorMsg] = useState("");
   const [stockErrors, setStockErrors] = useState([]);
   const [receipt, setReceipt] = useState(null);
+  useDialogFocus(isOpen, onClose, '[data-dialog="cart"]');
 
   if (!isOpen) return null;
 
@@ -49,10 +51,10 @@ export function CartDrawer({
         }
       }}
     >
-      <div className="drawer-panel">
+      <div className="drawer-panel" data-dialog="cart" tabIndex={-1}>
         <div className="modal-header" style={{ marginBottom: 0 }}>
           <h2 id="cart-drawer-title" className="modal-title">
-            Shopping Cart
+            Shopping cart
           </h2>
           <button
             type="button"
@@ -159,7 +161,7 @@ export function CartDrawer({
                 disabled={submitting}
                 onClick={handleCheckout}
               >
-                {submitting ? "Processing order..." : "Complete Order"}
+                {submitting ? "Processing order..." : "Complete order"}
               </button>
             </div>
           </>

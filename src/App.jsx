@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api/client.js";
+import { useRouter } from "./router.js";
 import { Header } from "./components/Header.jsx";
 import { BookCard } from "./components/BookCard.jsx";
 import { BookDetailModal } from "./components/BookDetailModal.jsx";
@@ -7,11 +8,29 @@ import { CartDrawer } from "./components/CartDrawer.jsx";
 import { AdminDashboard } from "./components/AdminDashboard.jsx";
 import { BookFormModal } from "./components/BookFormModal.jsx";
 import { ConfirmDeleteModal } from "./components/ConfirmDeleteModal.jsx";
-import { AuthModal } from "./components/AuthModal.jsx";
+import { ConfirmRoleModal } from "./components/ConfirmRoleModal.jsx";
+import { AuthPage } from "./components/AuthPage.jsx";
 import { MyOrdersModal } from "./components/MyOrdersModal.jsx";
 
+const AUTH_ROUTES = ["/login", "/signup"];
+const KNOWN_ROUTES = ["/login", "/signup", "/store", "/admin"];
+const EMPTY_USERS_META = { page: 1, limit: 20, total: 0, totalPages: 1 };
+
+function sameSession(previous, next) {
+  if (previous === next) return true;
+  if (!previous || !next) return false;
+  return (
+    previous.id === next.id &&
+    previous.username === next.username &&
+    previous.email === next.email &&
+    previous.role === next.role
+  );
+}
+
 export function App() {
-  const [activeView, setActiveView] = useState("storefront");
+  const { path, navigate } = useRouter();
+
+  const [sessionReady, setSessionReady] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
 
   const [books, setBooks] = useState([]);
@@ -41,23 +60,112 @@ export function App() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingBook, setEditingBook] = useState(null);
   const [deletingBook, setDeletingBook] = useState(null);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [ordersModalOpen, setOrdersModalOpen] = useState(false);
   const [myOrders, setMyOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [toast, setToast] = useState("");
 
+  const [users, setUsers] = useState([]);
+  const [usersMeta, setUsersMeta] = useState(EMPTY_USERS_META);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState("");
+  const [userFilters, setUserFilters] = useState({ q: "", page: 1 });
+  const [roleTarget, setRoleTarget] = useState(null);
+
+  const isAdmin = currentUser?.role === "admin";
+  const isAuthRoute = AUTH_ROUTES.includes(path);
+  const activeView = path === "/admin" ? "admin" : "store";
+
   const showToast = useCallback((message) => {
     setToast(message);
   }, []);
 
+  const closeRoleModal = useCallback(() => {
+    setRoleTarget(null);
+  }, []);
+
   useEffect(() => {
     if (!toast) return undefined;
-    const timer = setTimeout(() => setToast(""), 3000);
+    const timer = setTimeout(() => setToast(""), 3200);
     return () => clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => {
+    let active = true;
+    api
+      .getSession()
+      .then((res) => {
+        if (active) {
+          setCurrentUser((previous) => (sameSession(previous, res.data) ? previous : res.data));
+        }
+      })
+      .catch(() => {
+        if (active) setCurrentUser(null);
+      })
+      .finally(() => {
+        if (active) setSessionReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    function syncSession() {
+      api
+        .getSession()
+        .then((res) =>
+          setCurrentUser((previous) => (sameSession(previous, res.data) ? previous : res.data)),
+        )
+        .catch(() => {});
+    }
+    function handleVisibility() {
+      if (document.visibilityState === "visible") syncSession();
+    }
+    window.addEventListener("focus", syncSession);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("focus", syncSession);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!sessionReady) return;
+
+    if (!KNOWN_ROUTES.includes(path)) {
+      navigate(currentUser ? "/store" : "/login", { replace: true });
+      return;
+    }
+
+    if (!currentUser && !isAuthRoute) {
+      navigate("/login", { replace: true });
+      return;
+    }
+
+    if (currentUser && isAuthRoute) {
+      navigate("/store", { replace: true });
+      return;
+    }
+
+    if (currentUser && path === "/admin" && !isAdmin) {
+      navigate("/store", { replace: true });
+      showToast("Admin tools are limited to administrator accounts.");
+    }
+  }, [sessionReady, currentUser, path, isAuthRoute, isAdmin, navigate, showToast]);
+
+  useEffect(() => {
+    const titles = {
+      "/login": "Sign in | Booksore",
+      "/signup": "Create account | Booksore",
+      "/store": "Storefront | Booksore",
+      "/admin": "Admin desk | Booksore",
+    };
+    document.title = titles[path] || "Booksore | Independent Bookshop";
+  }, [path]);
+
   const fetchCatalog = useCallback(async () => {
+    if (!currentUser) return;
     setLoading(true);
     setLoadError("");
     try {
@@ -68,17 +176,17 @@ export function App() {
         inStock: filters.inStock ? "true" : undefined,
         sort,
         order,
-        page: activeView === "admin" ? 1 : filters.page,
-        limit: activeView === "admin" ? 100 : 12,
+        page: path === "/admin" ? 1 : filters.page,
+        limit: path === "/admin" ? 100 : 12,
       });
       setBooks(res.data);
       setMeta(res.meta);
       setStats(res.meta.stats);
 
-      setCart((prev) =>
-        prev
+      setCart((previous) =>
+        previous
           .map((item) => {
-            const fresh = res.data.find((b) => b.id === item.book.id);
+            const fresh = res.data.find((book) => book.id === item.book.id);
             if (!fresh) return item;
             return {
               book: fresh,
@@ -88,26 +196,50 @@ export function App() {
           .filter((item) => item.quantity > 0),
       );
     } catch (err) {
-      setLoadError(err.message || "Unable to load catalog");
+      if (err.status === 401) {
+        setCurrentUser(null);
+        navigate("/login", { replace: true });
+        return;
+      }
+      setLoadError(err.message || "Unable to load the catalog.");
     } finally {
       setLoading(false);
     }
-  }, [filters, activeView]);
+  }, [currentUser, filters, path, navigate]);
 
   useEffect(() => {
-    api
-      .getSession()
-      .then((res) => setCurrentUser(res.data))
-      .catch(() => setCurrentUser(null));
+    if (currentUser && (path === "/store" || path === "/admin")) {
+      fetchCatalog();
+    }
+  }, [currentUser, path, fetchCatalog]);
+
+  const loadUsers = useCallback(async (nextFilters) => {
+    setUsersLoading(true);
+    setUsersError("");
+    try {
+      const res = await api.listUsers({
+        q: nextFilters.q || undefined,
+        page: nextFilters.page,
+        limit: 20,
+      });
+      setUsers(res.data);
+      setUsersMeta(res.meta);
+    } catch (err) {
+      setUsersError(err.message || "Unable to load members.");
+    } finally {
+      setUsersLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    fetchCatalog();
-  }, [fetchCatalog]);
+    if (sessionReady && isAdmin && path === "/admin") {
+      loadUsers(userFilters);
+    }
+  }, [sessionReady, isAdmin, path, userFilters, loadUsers]);
 
   useEffect(() => {
-    function handleKeyDown(e) {
-      if (e.key === "Escape") {
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
         setInspectedBook(null);
         setCartOpen(false);
         setFormOpen(false);
@@ -124,26 +256,26 @@ export function App() {
 
   function handleAddToCart(book) {
     if (book.stock <= 0) return;
-    setCart((prev) => {
-      const existing = prev.find((item) => item.book.id === book.id);
+    setCart((previous) => {
+      const existing = previous.find((item) => item.book.id === book.id);
       if (existing) {
-        if (existing.quantity >= book.stock) return prev;
-        return prev.map((item) =>
+        if (existing.quantity >= book.stock) return previous;
+        return previous.map((item) =>
           item.book.id === book.id ? { ...item, quantity: item.quantity + 1 } : item,
         );
       }
-      return [...prev, { book, quantity: 1 }];
+      return [...previous, { book, quantity: 1 }];
     });
     showToast(`Added "${book.title}" to cart`);
   }
 
   function handleUpdateCartQty(bookId, nextQty) {
     if (nextQty <= 0) {
-      setCart((prev) => prev.filter((item) => item.book.id !== bookId));
+      setCart((previous) => previous.filter((item) => item.book.id !== bookId));
       return;
     }
-    setCart((prev) =>
-      prev.map((item) =>
+    setCart((previous) =>
+      previous.map((item) =>
         item.book.id === bookId
           ? { ...item, quantity: Math.min(nextQty, item.book.stock) }
           : item,
@@ -152,7 +284,7 @@ export function App() {
   }
 
   function handleRemoveCartItem(bookId) {
-    setCart((prev) => prev.filter((item) => item.book.id !== bookId));
+    setCart((previous) => previous.filter((item) => item.book.id !== bookId));
   }
 
   async function handleCheckout() {
@@ -170,19 +302,16 @@ export function App() {
   async function handleLogin(credentials) {
     const res = await api.login(credentials);
     setCurrentUser(res.data);
-    showToast(`Signed in as ${res.data.username || res.data.email}`);
+    setFilters((previous) => ({ ...previous, page: 1 }));
+    navigate("/store");
+    showToast(`Signed in as @${res.data.username || res.data.email}`);
   }
 
-  async function handleCustomerLogin({ username, password }) {
-    const res = await api.login({ username, password });
+  async function handleRegister(credentials) {
+    const res = await api.register(credentials);
     setCurrentUser(res.data);
-    showToast(`Welcome back, @${res.data.username}`);
-  }
-
-  async function handleCustomerRegister({ username, password }) {
-    const res = await api.register({ username, password });
-    setCurrentUser(res.data);
-    showToast(`Account created! Signed in as @${res.data.username}`);
+    navigate("/store");
+    showToast(`Account created. Welcome, @${res.data.username}`);
   }
 
   async function handleOpenOrders() {
@@ -199,12 +328,20 @@ export function App() {
   }
 
   async function handleLogout() {
-    await api.logout();
-    setCurrentUser(null);
-    if (activeView === "admin") {
-      setActiveView("storefront");
+    try {
+      await api.logout();
+      showToast("Signed out");
+    } catch {
+      showToast("Signed out on this device. The server could not be reached.");
     }
-    showToast("Signed out");
+    setCurrentUser(null);
+    setCart([]);
+    setBooks([]);
+    setLoading(true);
+    setUsers([]);
+    setUsersMeta(EMPTY_USERS_META);
+    setUserFilters({ q: "", page: 1 });
+    navigate("/login", { replace: true });
   }
 
   async function handleSaveBook(payload) {
@@ -213,7 +350,7 @@ export function App() {
       showToast(`Updated "${payload.title}"`);
     } else {
       await api.createBook(payload);
-      showToast(`Added "${payload.title}" to catalog`);
+      showToast(`Added "${payload.title}" to the catalog`);
     }
     await fetchCatalog();
   }
@@ -230,194 +367,255 @@ export function App() {
 
   async function handleConfirmDelete(book) {
     await api.deleteBook(book.id);
-    setCart((prev) => prev.filter((item) => item.book.id !== book.id));
+    setCart((previous) => previous.filter((item) => item.book.id !== book.id));
     await fetchCatalog();
     showToast(`Deleted "${book.title}"`);
   }
 
+  async function handleRoleChange(user) {
+    const nextRole = user.role === "admin" ? "customer" : "admin";
+    await api.updateUserRole(user.id, nextRole);
+    await loadUsers(userFilters);
+    showToast(
+      nextRole === "admin"
+        ? `@${user.username || user.email} is now an admin`
+        : `@${user.username || user.email} is now a customer`,
+    );
+  }
+
+  function handleSearchUsers(query) {
+    setUserFilters({ q: query, page: 1 });
+  }
+
+  function handleUsersPage(page) {
+    setUserFilters((previous) => ({ ...previous, page }));
+  }
+
   const totalCartItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const showShell = currentUser && !isAuthRoute;
+
+  if (!sessionReady) {
+    return (
+      <div className="boot-screen" role="status" aria-live="polite">
+        <span className="auth-mark">B</span>
+        <p>Opening the bookshop...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">
-      <Header
-        activeView={activeView}
-        onNavigate={setActiveView}
-        cartCount={totalCartItems}
-        onOpenCart={() => setCartOpen(true)}
-        currentUser={currentUser}
-        onOpenAuth={() => setAuthModalOpen(true)}
-        onOpenOrders={handleOpenOrders}
-        onLogout={handleLogout}
-      />
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
 
-      <main className="main-content container">
-        {activeView === "storefront" ? (
-          <>
-            <section className="hero-banner" aria-label="Bookshop overview">
-              <div>
-                <p className="hero-eyebrow">Curated Shelf & Live Stock</p>
-                <h1 className="hero-title">Independent Books, Thoughtfully Kept</h1>
-                <p className="hero-subtitle">
-                  Browse literary fiction, systems engineering, design craft, and timeless essays
-                  with real-time inventory checkout.
-                </p>
-              </div>
+      {showShell ? (
+        <>
+          <Header
+            activeView={activeView}
+            onNavigate={navigate}
+            cartCount={totalCartItems}
+            onOpenCart={() => setCartOpen(true)}
+            currentUser={currentUser}
+            onOpenOrders={handleOpenOrders}
+            onLogout={handleLogout}
+          />
 
-              <div className="hero-metrics">
-                <div className="metric-box">
-                  <div className="metric-value">{stats.totalTitles}</div>
-                  <div className="metric-label">Catalog Titles</div>
-                </div>
-                <div className="metric-box">
-                  <div className="metric-value">{stats.totalUnits}</div>
-                  <div className="metric-label">Copies Ready</div>
-                </div>
-                <div className="metric-box">
-                  <div className="metric-value">{stats.genres.length}</div>
-                  <div className="metric-label">Genres</div>
-                </div>
-              </div>
-            </section>
-
-            <section className="toolbar" aria-label="Catalog filters">
-              <input
-                className="input"
-                type="search"
-                aria-label="Search books by title, author, or ISBN"
-                placeholder="Search by title, author, or ISBN..."
-                value={filters.q}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, q: e.target.value, page: 1 }))
-                }
+          <main id="main-content" className="main-content container" tabIndex="-1">
+            {path === "/admin" && isAdmin ? (
+              <AdminDashboard
+                adminUser={currentUser}
+                books={books}
+                stats={stats}
+                users={users}
+                usersMeta={usersMeta}
+                usersLoading={usersLoading}
+                usersError={usersError}
+                onAddBook={() => {
+                  setEditingBook(null);
+                  setFormOpen(true);
+                }}
+                onEditBook={(book) => {
+                  setEditingBook(book);
+                  setFormOpen(true);
+                }}
+                onDeleteBook={setDeletingBook}
+                onQuickUpdate={handleQuickUpdate}
+                onSearchUsers={handleSearchUsers}
+                onUsersPage={handleUsersPage}
+                onRequestRoleChange={setRoleTarget}
               />
-
-              <select
-                className="select"
-                aria-label="Filter by genre"
-                value={filters.genre}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, genre: e.target.value, page: 1 }))
-                }
-              >
-                <option value="">All Genres</option>
-                {stats.genres.map((genre) => (
-                  <option key={genre} value={genre}>
-                    {genre}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                className="select"
-                aria-label="Sort books"
-                value={filters.sort}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, sort: e.target.value, page: 1 }))
-                }
-              >
-                <option value="createdAt:desc">Newest Arrivals</option>
-                <option value="title:asc">Title (A to Z)</option>
-                <option value="priceCents:asc">Price (Low to High)</option>
-                <option value="priceCents:desc">Price (High to Low)</option>
-                <option value="publishedYear:desc">Publication Year</option>
-              </select>
-
-              <label className="checkbox-pill">
-                <input
-                  type="checkbox"
-                  checked={filters.inStock}
-                  onChange={(e) =>
-                    setFilters((prev) => ({ ...prev, inStock: e.target.checked, page: 1 }))
-                  }
-                />
-                <span>In stock only</span>
-              </label>
-            </section>
-
-            {loadError && (
-              <div className="alert alert-error" role="alert">
-                {loadError}
-              </div>
-            )}
-
-            {loading ? (
-              <div className="empty-state">Loading catalog...</div>
-            ) : books.length === 0 ? (
-              <div className="empty-state">No books match your current filters.</div>
             ) : (
               <>
-                <div className="books-grid">
-                  {books.map((book) => (
-                    <BookCard
-                      key={book.id}
-                      book={book}
-                      cartQty={getCartQty(book.id)}
-                      onInspect={setInspectedBook}
-                      onAddToCart={handleAddToCart}
-                    />
-                  ))}
-                </div>
+                <section className="hero-banner" aria-label="Bookshop overview">
+                  <div>
+                    <p className="hero-eyebrow">Curated shelf and live stock</p>
+                    <h1 className="hero-title">Independent books, thoughtfully kept.</h1>
+                    <p className="hero-subtitle">
+                      Browse literary fiction, systems engineering, design craft, and timeless
+                      essays with real-time inventory checkout.
+                    </p>
+                  </div>
 
-                {meta.totalPages > 1 && (
-                  <div className="pagination">
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      disabled={meta.page <= 1}
-                      onClick={() =>
-                        setFilters((prev) => ({ ...prev, page: Math.max(1, prev.page - 1) }))
-                      }
-                    >
-                      Previous
-                    </button>
-                    <span style={{ fontSize: "0.9rem", color: "var(--ink-secondary)" }}>
-                      Page {meta.page} of {meta.totalPages}
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-sm"
-                      disabled={meta.page >= meta.totalPages}
-                      onClick={() =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          page: Math.min(meta.totalPages, prev.page + 1),
+                  <div className="hero-metrics">
+                    <div className="metric-box">
+                      <div className="metric-value">{stats.totalTitles}</div>
+                      <div className="metric-label">Catalog titles</div>
+                    </div>
+                    <div className="metric-box">
+                      <div className="metric-value">{stats.totalUnits}</div>
+                      <div className="metric-label">Copies ready</div>
+                    </div>
+                    <div className="metric-box">
+                      <div className="metric-value">{stats.genres.length}</div>
+                      <div className="metric-label">Genres</div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="toolbar" aria-label="Catalog filters">
+                  <input
+                    className="input"
+                    type="search"
+                    aria-label="Search books by title, author, or ISBN"
+                    placeholder="Search by title, author, or ISBN..."
+                    value={filters.q}
+                    onChange={(event) =>
+                      setFilters((previous) => ({
+                        ...previous,
+                        q: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  />
+
+                  <select
+                    className="select"
+                    aria-label="Filter by genre"
+                    value={filters.genre}
+                    onChange={(event) =>
+                      setFilters((previous) => ({
+                        ...previous,
+                        genre: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  >
+                    <option value="">All genres</option>
+                    {stats.genres.map((genre) => (
+                      <option key={genre} value={genre}>
+                        {genre}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    className="select"
+                    aria-label="Sort books"
+                    value={filters.sort}
+                    onChange={(event) =>
+                      setFilters((previous) => ({
+                        ...previous,
+                        sort: event.target.value,
+                        page: 1,
+                      }))
+                    }
+                  >
+                    <option value="createdAt:desc">Newest arrivals</option>
+                    <option value="title:asc">Title (A to Z)</option>
+                    <option value="priceCents:asc">Price (low to high)</option>
+                    <option value="priceCents:desc">Price (high to low)</option>
+                    <option value="publishedYear:desc">Publication year</option>
+                  </select>
+
+                  <label className="checkbox-pill">
+                    <input
+                      type="checkbox"
+                      checked={filters.inStock}
+                      onChange={(event) =>
+                        setFilters((previous) => ({
+                          ...previous,
+                          inStock: event.target.checked,
+                          page: 1,
                         }))
                       }
-                    >
-                      Next
-                    </button>
+                    />
+                    <span>In stock only</span>
+                  </label>
+                </section>
+
+                {loadError && (
+                  <div className="alert alert-error" role="alert">
+                    {loadError}
                   </div>
+                )}
+
+                {loading ? (
+                  <div className="empty-state">Loading catalog...</div>
+                ) : books.length === 0 ? (
+                  <div className="empty-state">No books match your current filters.</div>
+                ) : (
+                  <>
+                    <div className="books-grid">
+                      {books.map((book) => (
+                        <BookCard
+                          key={book.id}
+                          book={book}
+                          cartQty={getCartQty(book.id)}
+                          onInspect={setInspectedBook}
+                          onAddToCart={handleAddToCart}
+                        />
+                      ))}
+                    </div>
+
+                    {meta.totalPages > 1 && (
+                      <div className="pagination">
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          disabled={meta.page <= 1}
+                          onClick={() =>
+                            setFilters((previous) => ({
+                              ...previous,
+                              page: Math.max(1, previous.page - 1),
+                            }))
+                          }
+                        >
+                          Previous
+                        </button>
+                        <span className="pagination-label">
+                          Page {meta.page} of {meta.totalPages}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          disabled={meta.page >= meta.totalPages}
+                          onClick={() =>
+                            setFilters((previous) => ({
+                              ...previous,
+                              page: Math.min(meta.totalPages, previous.page + 1),
+                            }))
+                          }
+                        >
+                          Next
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             )}
-          </>
-        ) : (
-          <AdminDashboard
-            adminUser={currentUser?.role === "admin" ? currentUser : null}
-            books={books}
-            stats={stats}
-            onLogin={handleLogin}
-            onAddBook={() => {
-              setEditingBook(null);
-              setFormOpen(true);
-            }}
-            onEditBook={(book) => {
-              setEditingBook(book);
-              setFormOpen(true);
-            }}
-            onDeleteBook={setDeletingBook}
-            onQuickUpdate={handleQuickUpdate}
-          />
-        )}
-      </main>
-
-      <AuthModal
-        isOpen={authModalOpen}
-        onClose={() => setAuthModalOpen(false)}
-        onLogin={handleCustomerLogin}
-        onRegister={handleCustomerRegister}
-        onSwitchToAdmin={() => setActiveView("admin")}
-      />
+          </main>
+        </>
+      ) : (
+        <AuthPage
+          key={path}
+          mode={path === "/signup" ? "register" : "login"}
+          onLogin={handleLogin}
+          onRegister={handleRegister}
+          onNavigate={navigate}
+        />
+      )}
 
       <MyOrdersModal
         isOpen={ordersModalOpen}
@@ -453,6 +651,12 @@ export function App() {
         book={deletingBook}
         onClose={() => setDeletingBook(null)}
         onConfirm={handleConfirmDelete}
+      />
+
+      <ConfirmRoleModal
+        user={roleTarget}
+        onClose={closeRoleModal}
+        onConfirm={handleRoleChange}
       />
 
       {toast && (

@@ -4,12 +4,11 @@ export function Header({
   cartCount,
   onOpenCart,
   currentUser,
-  onOpenAuth,
   onOpenOrders,
   onLogout,
 }) {
   const isAdmin = currentUser?.role === "admin";
-  const isCustomer = currentUser?.role === "customer";
+  const displayName = currentUser?.username || currentUser?.email || "Member";
 
   return (
     <header className="site-header">
@@ -17,71 +16,48 @@ export function Header({
         <button
           type="button"
           className="brand"
-          onClick={() => onNavigate("storefront")}
-          aria-label="Booksore home"
+          onClick={() => onNavigate("/store")}
+          aria-label="Booksore storefront"
         >
-          <span className="brand-name">Bookstore</span>
+          <span className="brand-name">Booksore</span>
           <span className="brand-tag">Independent Bookshop</span>
         </button>
 
         <nav className="header-nav" aria-label="Primary navigation">
           <button
             type="button"
-            className={`nav-pill ${activeView === "storefront" ? "active" : ""}`}
-            onClick={() => onNavigate("storefront")}
+            className={`nav-pill ${activeView === "store" ? "active" : ""}`}
+            onClick={() => onNavigate("/store")}
+            aria-current={activeView === "store" ? "page" : undefined}
           >
             Storefront
           </button>
 
-          {isCustomer && (
-            <>
-              <span className="nav-pill" style={{ borderColor: "transparent", background: "var(--bg-accent-soft)", color: "var(--brand-primary)" }}>
-                Hi, @{currentUser.username}
-              </span>
-              <button
-                type="button"
-                className="nav-pill"
-                onClick={onOpenOrders}
-              >
-                My Orders
-              </button>
-            </>
-          )}
+          <button type="button" className="nav-pill" onClick={onOpenOrders}>
+            My Orders
+          </button>
 
           {isAdmin && (
             <button
               type="button"
               className={`nav-pill ${activeView === "admin" ? "active" : ""}`}
-              onClick={() => onNavigate("admin")}
+              onClick={() => onNavigate("/admin")}
+              aria-current={activeView === "admin" ? "page" : undefined}
             >
-              Admin Inventory
+              Admin
             </button>
           )}
 
-          {!currentUser && (
-            <>
-              <button
-                type="button"
-                className="nav-pill"
-                onClick={onOpenAuth}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                className={`nav-pill ${activeView === "admin" ? "active" : ""}`}
-                onClick={() => onNavigate("admin")}
-              >
-                Admin
-              </button>
-            </>
-          )}
+          <span className="nav-user" title={displayName}>
+            <span className="nav-user-name">@{displayName}</span>
+            <span className={`role-chip ${isAdmin ? "role-admin" : "role-customer"}`}>
+              {isAdmin ? "Admin" : "Customer"}
+            </span>
+          </span>
 
-          {currentUser && (
-            <button type="button" className="nav-pill" onClick={onLogout}>
-              Sign Out
-            </button>
-          )}
+          <button type="button" className="nav-pill nav-signout" onClick={onLogout}>
+            Sign out
+          </button>
 
           <button
             type="button"

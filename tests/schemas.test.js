@@ -8,6 +8,8 @@ import {
   loginSchema,
   registerSchema,
   checkoutSchema,
+  updateUserRoleSchema,
+  userListQuerySchema,
 } from "../server/validation/schemas.js";
 
 describe("validation schemas", () => {
@@ -99,5 +101,24 @@ describe("validation schemas", () => {
     const valid = registerSchema.safeParse({ username: "book_reader99", password: "mypassword" });
     assert.equal(valid.success, true);
     assert.equal(valid.data.username, "book_reader99");
+  });
+
+  it("validates admin role updates and member list filters", () => {
+    assert.equal(updateUserRoleSchema.safeParse({ role: "admin" }).success, true);
+    assert.equal(updateUserRoleSchema.safeParse({ role: "customer" }).success, true);
+    assert.equal(updateUserRoleSchema.safeParse({ role: "owner" }).success, false);
+
+    const parsed = userListQuerySchema.safeParse({
+      q: "  maria  ",
+      role: "customer",
+      page: "2",
+      limit: "50",
+    });
+    assert.equal(parsed.success, true);
+    assert.equal(parsed.data.q, "maria");
+    assert.equal(parsed.data.page, 2);
+    assert.equal(parsed.data.limit, 50);
+    assert.equal(userListQuerySchema.safeParse({ role: "superuser" }).success, false);
+    assert.equal(userListQuerySchema.safeParse({ limit: "500" }).success, false);
   });
 });

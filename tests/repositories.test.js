@@ -118,7 +118,6 @@ describe("repositories", () => {
     assert.equal(customer.role, "customer");
     assert.equal(customer.username, "juan_reader");
     assert.equal(userRepo.findByUsername("juan_reader").id, customer.id);
-
     const book = bookRepo.create({
       title: "Noli Me Tangere",
       author: "Jose Rizal",
@@ -140,5 +139,34 @@ describe("repositories", () => {
     assert.equal(myOrders.length, 1);
     assert.equal(myOrders[0].orderId, receipt.orderId);
     assert.equal(myOrders[0].totalCents, 45000);
+  });
+
+  it("lists members with filters and updates roles", () => {
+    userRepo.createAdmin({
+      username: "admin",
+      email: "admin@booksore.local",
+      passwordHash: "salt:adminhash",
+    });
+    const customer = userRepo.createCustomer({
+      username: "reader_one",
+      passwordHash: "salt:custhash",
+    });
+
+    const all = userRepo.findAll({ page: 1, limit: 20 });
+    assert.equal(all.total, 2);
+    assert.equal(all.items[0].passwordHash, undefined);
+
+    const admins = userRepo.findAll({ role: "admin" });
+    assert.equal(admins.total, 1);
+    assert.equal(admins.items[0].username, "admin");
+
+    const searched = userRepo.findAll({ q: "reader" });
+    assert.equal(searched.total, 1);
+    assert.equal(searched.items[0].id, customer.id);
+
+    const promoted = userRepo.updateRole(customer.id, "admin");
+    assert.equal(promoted.role, "admin");
+    assert.equal(userRepo.countAdmins(), 2);
+    assert.equal(userRepo.updateRole("missing-id", "admin"), null);
   });
 });

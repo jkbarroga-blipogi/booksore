@@ -8,14 +8,21 @@ export class ApiError extends Error {
 }
 
 async function request(path, options = {}) {
-  const response = await fetch(path, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  let response;
+  try {
+    response = await fetch(path, {
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+      ...options,
+    });
+  } catch {
+    throw new ApiError("Cannot reach the server. Check your connection and try again.", {
+      code: "NETWORK_ERROR",
+    });
+  }
 
   if (response.status === 204) {
     return null;
@@ -62,6 +69,24 @@ export const api = {
 
   getMyOrders() {
     return request("/api/v1/orders/my-orders");
+  },
+
+  listUsers(params = {}) {
+    const search = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== "" && value !== null) {
+        search.set(key, String(value));
+      }
+    }
+    const qs = search.toString();
+    return request(`/api/v1/users${qs ? `?${qs}` : ""}`);
+  },
+
+  updateUserRole(id, role) {
+    return request(`/api/v1/users/${id}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role }),
+    });
   },
 
   listBooks(params = {}) {

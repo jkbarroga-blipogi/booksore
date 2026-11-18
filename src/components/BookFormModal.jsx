@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useDialogFocus } from "../hooks/useDialogFocus.js";
 
 const EMPTY_FORM = {
   title: "",
@@ -34,6 +35,7 @@ export function BookFormModal({ isOpen, editingBook, onClose, onSave }) {
   const [fieldErrors, setFieldErrors] = useState({});
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  useDialogFocus(isOpen, onClose, '[data-dialog="book-form"]');
 
   useEffect(() => {
     if (isOpen) {
@@ -128,10 +130,10 @@ export function BookFormModal({ isOpen, editingBook, onClose, onSave }) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="modal-panel">
+      <div className="modal-panel" data-dialog="book-form" tabIndex={-1}>
         <div className="modal-header">
           <h2 id="book-form-title" className="modal-title">
-            {editingBook ? "Edit Book" : "Add New Book"}
+            {editingBook ? "Edit book" : "Add new book"}
           </h2>
           <button type="button" className="close-btn" onClick={onClose} aria-label="Close form">
             x
@@ -144,7 +146,7 @@ export function BookFormModal({ isOpen, editingBook, onClose, onSave }) {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} noValidate>
+        <form className="book-form" onSubmit={handleSubmit} noValidate>
           <div className="form-grid">
             <label className="form-field full">
               <span className="field-label">Title</span>
@@ -286,7 +288,7 @@ export function BookFormModal({ isOpen, editingBook, onClose, onSave }) {
               Cancel
             </button>
             <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? "Saving..." : editingBook ? "Save Changes" : "Create Book"}
+              {submitting ? "Saving..." : editingBook ? "Save changes" : "Create book"}
             </button>
           </div>
         </form>

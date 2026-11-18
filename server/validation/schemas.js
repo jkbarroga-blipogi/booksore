@@ -101,6 +101,28 @@ export const registerSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters").max(200),
 });
 
+export const userRoleSchema = z.enum(["customer", "admin"]);
+
+export const userIdParamSchema = z.object({
+  id: z.string().uuid("Invalid user ID format"),
+});
+
+export const updateUserRoleSchema = z.object({
+  role: userRoleSchema,
+});
+
+export const userListQuerySchema = z.object({
+  q: z
+    .string()
+    .trim()
+    .max(100)
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : undefined)),
+  role: userRoleSchema.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
 export const loginSchema = z
   .object({
     username: z.string().trim().min(1).max(200).optional(),

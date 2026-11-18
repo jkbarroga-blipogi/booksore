@@ -1,15 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useDialogFocus } from "../hooks/useDialogFocus.js";
 
 export function ConfirmDeleteModal({ book, onClose, onConfirm }) {
   const [deleting, setDeleting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  useDialogFocus(Boolean(book), onClose, '[data-dialog="confirm-delete"]');
+
+  useEffect(() => {
+    setDeleting(false);
+    setErrorMsg("");
+  }, [book?.id]);
 
   if (!book) return null;
 
   async function handleConfirm() {
     setDeleting(true);
+    setErrorMsg("");
     try {
       await onConfirm(book);
       onClose();
+    } catch (err) {
+      setErrorMsg(err.message || "The book could not be deleted. Try again.");
     } finally {
       setDeleting(false);
     }
@@ -21,27 +32,46 @@ export function ConfirmDeleteModal({ book, onClose, onConfirm }) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-modal-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+      aria-describedby="delete-modal-description"
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !deleting) onClose();
       }}
     >
-      <div className="modal-panel" style={{ maxWidth: "420px" }}>
+      <div className="modal-panel modal-panel-sm" data-dialog="confirm-delete" tabIndex={-1}>
         <div className="modal-header">
           <h2 id="delete-modal-title" className="modal-title">
-            Delete Book
+            Delete book
           </h2>
-          <button type="button" className="close-btn" onClick={onClose} aria-label="Close confirm">
+          <button
+            type="button"
+            className="close-btn"
+            onClick={onClose}
+            disabled={deleting}
+            aria-label="Close delete confirmation"
+          >
             x
           </button>
         </div>
 
-        <p style={{ margin: "0 0 18px", color: "var(--ink-secondary)" }}>
+        <p id="delete-modal-description" className="modal-description">
           Remove <strong>{book.title}</strong> by {book.author} from the catalog? This action
           cannot be undone.
         </p>
 
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-          <button type="button" className="btn btn-secondary" onClick={onClose}>
+        {errorMsg && (
+          <div className="alert alert-error" role="alert">
+            {errorMsg}
+          </div>
+        )}
+
+        <div className="modal-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            data-autofocus
+            onClick={onClose}
+            disabled={deleting}
+          >
             Cancel
           </button>
           <button
@@ -50,7 +80,7 @@ export function ConfirmDeleteModal({ book, onClose, onConfirm }) {
             disabled={deleting}
             onClick={handleConfirm}
           >
-            {deleting ? "Deleting..." : "Delete Book"}
+            {deleting ? "Deleting..." : "Delete book"}
           </button>
         </div>
       </div>

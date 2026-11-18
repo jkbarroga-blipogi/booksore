@@ -1,7 +1,10 @@
 import { BookCover } from "./BookCover.jsx";
 import { formatPrice } from "../utils/format.js";
+import { useDialogFocus } from "../hooks/useDialogFocus.js";
 
 export function BookDetailModal({ book, cartQty, onClose, onAddToCart }) {
+  useDialogFocus(Boolean(book), onClose, '[data-dialog="book-detail"]');
+
   if (!book) return null;
 
   const isOutOfStock = book.stock === 0;
@@ -17,7 +20,7 @@ export function BookDetailModal({ book, cartQty, onClose, onAddToCart }) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="modal-panel">
+      <div className="modal-panel" data-dialog="book-detail" tabIndex={-1}>
         <div className="modal-header">
           <h2 id="detail-modal-title" className="modal-title">
             {book.title}
